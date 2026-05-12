@@ -1,7 +1,7 @@
 <template>
-  <div class="p-8 text-white">
+  <div class="p-8 text-content">
     <!-- 第一行：每日推荐 & 私人漫游 卡片 -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+    <div class="grid grid-cols-2 gap-6 mb-10">
       <!-- 每日推荐 -->
       <div
         class="h-48 bg-gradient-to-br from-pink-600 to-purple-700 rounded-3xl overflow-hidden relative cursor-pointer group"
@@ -19,76 +19,61 @@
       </div>
 
       <!-- 私人漫游 卡片 -->
-       <!-- 私人漫游 卡片 -->
-<div
-  class="h-48 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-3xl overflow-hidden relative group select-none"
-  @click="!userStore.isLoggedIn ? goLogin() : null"
->
-  <!-- 模糊封面层（仅在有歌曲且有封面时显示，低透明度模糊） -->
-  <div
-    v-if="player.fmSong && fmCoverUrl"
-    class="absolute inset-0 bg-cover bg-center opacity-30 blur-md scale-110"
-    :style="{ backgroundImage: `url(${fmCoverUrl})` }"
-  ></div>
-  <!-- 遮罩 -->
-  <div class="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition"></div>
-
-  <!-- 内容 -->
-  <div class="relative z-10 h-full">
-    <!-- 未登录 -->
-    <div v-if="!userStore.isLoggedIn" class="flex flex-col items-center justify-center h-full">
-      <p class="text-xs text-white/60 mb-1">🌀 一键探索</p>
-      <h2 class="text-2xl font-bold">私人漫游</h2>
-      <p class="text-xs text-white/60 mt-2">登录后即可开启沉浸式音乐探索</p>
-    </div>
-
-    <!-- 登录后：无歌曲 → 垂直居中播放按钮 -->
-    <div
-      v-else-if="!player.fmSong"
-      class="flex flex-col items-center justify-center h-full gap-3 cursor-pointer"
-      @click.stop="startFmPlay"
-    >
-      <p class="text-xs text-white/60">🌀 一键探索</p>
-      <h2 class="text-2xl font-bold">私人漫游</h2>
-      <button
-        class="w-12 h-12 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition mt-2"
+      <div
+        class="h-48 rounded-3xl overflow-hidden relative group select-none cursor-pointer"
+        :class="player.fmSong && fmCoverUrl ? '' : 'bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-500'"
+        @click="onFmCardClick"
       >
-        <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor" class="text-white">
-          <path d="M4 2.5v11l9-5.5z" />
-        </svg>
-      </button>
-    </div>
+        <div
+          v-if="player.fmSong && fmCoverUrl"
+          class="absolute inset-0 bg-cover bg-center scale-110"
+          :style="{ backgroundImage: `url(${fmCoverUrl})` }"
+        ></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10 group-hover:from-black/60 transition"></div>
 
-    <!-- 有歌曲 → 横向布局：左侧信息，右侧按钮 -->
-    <div v-else class="flex items-center justify-between h-full px-6 cursor-pointer" @click.stop="player.toggleFm">
-      <!-- 左侧：封面 + 歌曲信息 -->
-      <div class="flex items-center gap-3 min-w-0">
-        <img :src="fmCoverUrl" class="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
-        <div class="min-w-0">
-          <p class="text-sm font-semibold truncate">{{ fmDisplayName }}</p>
-          <p class="text-xs text-white/70 truncate">{{ fmDisplayArtists }}</p>
+        <div class="relative z-10 h-full flex flex-col justify-between p-6">
+          <div class="flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/50"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+            <span class="text-xs text-white/50 font-medium">私人漫游</span>
+          </div>
+
+          <div class="flex items-end justify-between gap-4">
+            <div class="min-w-0 flex-1">
+              <h2 class="text-xl font-bold" v-if="!player.fmSong && userStore.isLoggedIn">发现新音乐</h2>
+              <h2 class="text-xl font-bold" v-else-if="!userStore.isLoggedIn">私人漫游</h2>
+              <h2 class="text-lg font-bold truncate" v-else>{{ fmDisplayName }}</h2>
+              <p v-if="!userStore.isLoggedIn" class="text-xs text-white/50 mt-1">登录后开启沉浸式音乐探索</p>
+              <p v-else-if="!player.fmSong" class="text-xs text-white/50 mt-1">根据你的喜好，为你推荐意想不到的好歌</p>
+              <p v-else class="text-xs text-white/60 truncate mt-1">{{ fmDisplayArtists }}</p>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button v-if="userStore.isLoggedIn && !player.fmSong"
+                @click.stop="startFmPlay"
+                class="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm transition">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
+                  <path d="M4 2.5v11l9-5.5z" />
+                </svg>
+              </button>
+              <template v-if="player.fmSong">
+                <button @click.stop="player.toggleFm"
+                  class="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm transition">
+                  <svg v-if="player.fmPlaying" width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
+                    <rect x="3" y="2" width="3" height="12" rx="0.5" />
+                    <rect x="10" y="2" width="3" height="12" rx="0.5" />
+                  </svg>
+                  <svg v-else width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
+                    <path d="M4 2.5v11l9-5.5z" />
+                  </svg>
+                </button>
+                <button @click.stop="player.nextFm"
+                  class="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
-      <!-- 右侧：控制按钮 -->
-      <div class="flex items-center gap-3 ml-4">
-        <button @click.stop="player.toggleFm"
-          class="w-10 h-10 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 transition"
-        >
-          <svg v-if="player.fmPlaying" width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
-            <rect x="3" y="2" width="3" height="12" rx="0.5" />
-            <rect x="10" y="2" width="3" height="12" rx="0.5" />
-          </svg>
-          <svg v-else width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
-            <path d="M4 2.5v11l9-5.5z" />
-          </svg>
-        </button>
-        <button @click.stop="player.nextFm" class="text-xl text-white/80 hover:text-white transition">⏭</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="absolute right-4 top-1/2 -translate-y-1/2 text-6xl opacity-20 pointer-events-none">🌊</div>
-</div>
 
     </div>
 
@@ -97,11 +82,11 @@
       <h2 class="text-xl font-semibold mb-4">🎯 为你推荐</h2>
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <div v-for="pl in recPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
-          class="bg-white/5 rounded-xl overflow-hidden hover:bg-white/10 transition cursor-pointer">
+          class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer">
           <img :src="pl.picUrl" class="w-full aspect-square object-cover" />
           <div class="p-3">
             <p class="text-sm font-medium truncate">{{ pl.name }}</p>
-            <p class="text-xs text-gray-400 mt-1">{{ pl.copywriter || '' }}</p>
+            <p class="text-xs text-content-2 mt-1">{{ pl.copywriter || '' }}</p>
           </div>
         </div>
       </div>
@@ -112,7 +97,7 @@
       <h2 class="text-xl font-semibold mb-4">📈 热门歌单</h2>
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <div v-for="pl in rankPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
-          class="bg-white/5 rounded-xl overflow-hidden hover:bg-white/10 transition cursor-pointer backdrop-blur-sm">
+          class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer backdrop-blur-sm">
           <img :src="pl.coverImgUrl" class="w-full aspect-square object-cover" />
           <div class="p-3">
             <p class="text-sm font-medium truncate">{{ pl.name }}</p>
@@ -155,13 +140,23 @@ const fmDisplayArtists = computed(() => {
 
 // 首次点击播放按钮：开始 FM 并播放
 async function startFmPlay() {
-  // 如果还没加载过 FM，或者之前加载了但被停止了，重新加载
   if (!player.fmSong) {
-    await player.loadFm(); // loadFm 内部会设置 fmSong 并播放
+    await player.loadFm();
   } else {
-    // 已有歌曲但未播放状态（比如之前暂停/停止了），直接播放
     await player.toggleFm();
   }
+}
+
+function onFmCardClick() {
+  if (!userStore.isLoggedIn) {
+    goLogin();
+    return;
+  }
+  if (!player.fmSong) {
+    startFmPlay();
+    return;
+  }
+  player.openRoamDrawer();
 }
 
 onMounted(async () => {

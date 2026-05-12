@@ -2,8 +2,9 @@ import { defineStore } from 'pinia';
 import { ref , watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeSong } from '../utils/song';
+import { useSettingsStore } from './settings';
+import { useUserStore } from './user';
 
-// 设置播放模式，目前只有顺序循环，后续可扩展
 export type PlayMode = 'loop' | 'shuffle' | 'repeat-one';
 
 export interface Song {
@@ -33,6 +34,22 @@ export function setupCacheProgressListener() {
 // 在 store 定义外调用 setupCacheProgressListener()，或者在应用入口调用
 
 
+function loadRecentLocal(): Song[] {
+  try {
+    const raw = localStorage.getItem('recent_local');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function loadLikedIdsFromStorage(): Set<number> {
+  try {
+    const raw = localStorage.getItem('liked_ids');
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
 export const usePlayerStore = defineStore('player', () => {
   const currentSong = ref<Song | null>(null);
   const playing = ref(false);
@@ -43,6 +60,56 @@ export const usePlayerStore = defineStore('player', () => {
   const currentIndex = ref(-1);
 
   let tickInterval: ReturnType<typeof setInterval> | null = null;
+
+  const recentLocal = ref<Song[]>(loadRecentLocal());
+  const MAX_RECENT = 200;
+
+  const likedIds = ref<Set<number>>(loadLikedIdsFromStorage());
+
+  function isLiked(songId: number): boolean {
+    return likedIds.value.has(songId);
+  }
+
+  async function loadLikedIds() {
+    const userStore = useUserStore();
+    if (!userStore.isLoggedIn) return;
+    try {
+      const json: string = await invoke('likelist', { uid: userStore.user!.userId });
+      const data = JSON.parse(json);
+      const ids: number[] = data.ids || data.data?.ids || [];
+      likedIds.value = new Set(ids);
+    } catch { /* 忽略 */ }
+  }
+
+  async function toggleLike(songId: number) {
+    const wasLiked = likedIds.value.has(songId);
+    const newLike = !wasLiked;
+    try {
+      await invoke('like_song', { query: { id: songId, like: newLike ? 'true' : 'false' } });
+      if (newLike) {
+        likedIds.value.add(songId);
+      } else {
+        likedIds.value.delete(songId);
+      }
+      likedIds.value = new Set(likedIds.value);
+    } catch { /* 忽略 */ }
+  }
+
+  function addRecent(song: Song) {
+    recentLocal.value = recentLocal.value.filter(s => s.id !== song.id);
+    recentLocal.value.unshift(song);
+    if (recentLocal.value.length > MAX_RECENT) {
+      recentLocal.value = recentLocal.value.slice(0, MAX_RECENT);
+    }
+  }
+
+  watch(recentLocal, (val) => {
+    localStorage.setItem('recent_local', JSON.stringify(val));
+  }, { deep: true });
+
+  watch(likedIds, (val) => {
+    localStorage.setItem('liked_ids', JSON.stringify([...val]));
+  }, { deep: true });
 
   const isFmMode = ref(false);
   let fmNextCallback: (() => void) | null = null;
@@ -62,7 +129,7 @@ export const usePlayerStore = defineStore('player', () => {
     // 如果缺少时长，尝试从详情接口获取
     if (!song.dt || song.dt === 0) {
       try {
-        const jsonStr: string = await invoke('get_song_detail', { id: Number(song.id) });
+        const jsonStr: string = await invoke('get_song_detail', { id: String(song.id) });
         const data = JSON.parse(jsonStr);
         const full = data.songs?.[0];
         if (full) {
@@ -80,13 +147,15 @@ export const usePlayerStore = defineStore('player', () => {
 
     currentSong.value = song;
     try {
-      const url: string = await invoke('get_song_url', { id: Number(song.id) });
+      const settings = useSettingsStore();
+      const url: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
       if (!url) throw new Error('无播放源');
       await invoke('play_audio', { url });
       playing.value = true;
       duration.value = (song.dt || 0) / 1000;
       currentTime.value = 0;
       startTick();
+      addRecent(song);
     } catch (e) {
       console.error('FM播放失败', e);
       playing.value = false;
@@ -122,8 +191,8 @@ export const usePlayerStore = defineStore('player', () => {
       currentTime.value = 0;
       duration.value = (song.dt || 0) / 1000;
 
-      // 获取 URL 并播放
-      const url: string = await invoke('get_song_url', { id: Number(song.id) });
+      const settings = useSettingsStore();
+      const url: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
       if (!url) {
         console.error('未获取到有效播放地址', song);
         return;
@@ -132,6 +201,7 @@ export const usePlayerStore = defineStore('player', () => {
       await invoke('play_audio', { url });
       playing.value = true;
       startTick();
+      addRecent(song);
     } catch (e) {
       console.error('播放失败', e);
       playing.value = false;
@@ -279,6 +349,10 @@ export const usePlayerStore = defineStore('player', () => {
     showRoamDrawer.value = false;
   }
 
+  function toggleRoamDrawer() {
+    showRoamDrawer.value = !showRoamDrawer.value;
+  }
+
   async function loadFirstFmSong() {
   try {
     const jsonStr: string = await invoke('personal_fm');
@@ -388,9 +462,17 @@ watch(playing, (val) => {
     removeFromQueue,
     clearQueue,
 
+    recentLocal,
+
+    likedIds,
+    isLiked,
+    loadLikedIds,
+    toggleLike,
+
     showRoamDrawer,
     openRoamDrawer,
     closeRoamDrawer,
+    toggleRoamDrawer,
     loadFirstFmSong,
 
     fmSong,

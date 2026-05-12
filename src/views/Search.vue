@@ -1,40 +1,31 @@
 <template>
-  <div class="text-white">
+  <div class="text-content">
     <h1 class="text-2xl font-bold mb-4">搜索</h1>
-
-    <!-- 输出设备选择-->
-    <!-- <div class="mb-4">
-      <label class="mr-2">输出设备：</label>
-      <select v-model="selectedDevice" @change="changeDevice" class="bg-white/10 text-white rounded p-1">
-        <option :value="null">跟随系统默认</option>
-        <option v-for="dev in devices" :key="dev" :value="dev">{{ dev }}</option>
-      </select>
-    </div> -->
 
     <input
       v-model="keyword"
       @keyup.enter="handleSearch"
       placeholder="搜索歌曲..."
-      class="mb-6 w-full rounded-xl bg-white/10 p-3 text-white placeholder-gray-400 outline-none backdrop-blur"
+      class="mb-6 w-full rounded-xl bg-muted p-3 text-content placeholder-content-2 outline-none backdrop-blur"
     />
 
-    <div v-if="loading" class="text-gray-400">搜索中...</div>
+    <div v-if="loading" class="text-content-2">搜索中...</div>
     <div v-else class="space-y-3">
       <div
         v-for="song in results"
         :key="song.id"
         @click="playSong(song)"
-        class="flex items-center gap-4 p-3 rounded-xl backdrop-blur-md bg-white/5 hover:bg-white/10 border border-white/5 cursor-pointer transition-all duration-200 hover:scale-[1.01] active:scale-95"
+        class="flex items-center gap-4 p-3 rounded-xl backdrop-blur-md bg-subtle hover:bg-muted border border-line-2 cursor-pointer transition-all duration-200 hover:scale-[1.01] active:scale-95"
       >
         <img :src="song.al?.picUrl" class="w-12 h-12 rounded-lg object-cover" />
         <div>
           <p class="font-medium">{{ song.name }}</p>
-          <p class="text-sm text-gray-400">
+          <p class="text-sm text-content-2">
             {{ song.ar?.map((a: any) => a.name).join(' / ') }}
           </p>
         </div>
       </div>
-      <p v-if="!loading && hasSearched && results.length === 0" class="text-gray-400">无结果</p>
+      <p v-if="!loading && hasSearched && results.length === 0" class="text-content-2">无结果</p>
     </div>
 
   </div>
@@ -58,14 +49,12 @@ const hasSearched = ref(false);
 const player = usePlayerStore();
 
 const route = useRoute();
-// 监听从首页或其他地方传来的 query 参数，自动搜索
 watch(
   () => route.query.q,
   (newQ) => {
     if (newQ) {
       keyword.value = newQ as string;
       handleSearch();
-      // 清除 query，防止刷新后重复搜索
       router.replace({ query: {} });
     }
   },
@@ -96,13 +85,8 @@ async function playSong(song: any) {
 }
 
 const devices = ref<string[]>([]);
-// const selectedDevice = ref<string | null>(null);
 
 onMounted(async () => {
   devices.value = await invoke('get_output_devices');
 });
-
-// async function changeDevice() {
-//   await invoke('set_output_device', { device: selectedDevice.value });
-// }
 </script>

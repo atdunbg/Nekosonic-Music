@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { parseLrc, getCurrentLyricIndex, LyricLine } from '../utils/lyric';
 import { usePlayerStore } from '../stores/player';
@@ -8,12 +8,6 @@ export function useLyric() {
 
   const lyrics = ref<LyricLine[]>([]);
   const currentLyricIdx = ref(-1);
-
-  const currentLyricText = computed(() => {
-    if (lyrics.value.length === 0) return '';
-    const idx = currentLyricIdx.value;
-    return idx >= 0 && idx < lyrics.value.length ? lyrics.value[idx].text : '';
-  });
 
   watch(() => player.currentSong, async (song) => {
     if (!song) {
@@ -43,6 +37,5 @@ export function useLyric() {
   return {
     lyrics,
     currentLyricIdx,
-    currentLyricText,
   };
 }

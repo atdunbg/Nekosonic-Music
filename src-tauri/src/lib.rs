@@ -1,24 +1,25 @@
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     menu::{MenuBuilder, MenuItemBuilder},
-    Manager, LogicalSize, Emitter,
+    Manager, Emitter,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 
 mod api;
 mod audio;
 use api::ApiController;
 use audio::AppAudio;
 
+static ALLOW_EXIT: AtomicBool = AtomicBool::new(false);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
-            // 窗口最小尺寸
-            window.set_min_size(Some(LogicalSize::new(1280.0, 700.0)))?;
 
             // 注入控制器
-            let api_controller = ApiController::new();
+            let app_data_dir = app.path().app_data_dir().expect("无法获取应用数据目录");
+            let api_controller = ApiController::new(app_data_dir);
             app.manage(api_controller);
 
             let audio_controller = audio::AudioController::new(app.handle().clone());
@@ -66,7 +67,10 @@ pub fn run() {
                             let _ = app.emit("tray-prev", ());
                         }
                         "quit" => {
-                            app.exit(0);
+                            ALLOW_EXIT.store(true, Ordering::SeqCst);
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.close();
+                            }
                         }
                         _ => {}
                     }
@@ -87,11 +91,15 @@ pub fn run() {
                 .build(app)?;
 
             // 点击关闭按钮时隐藏到托盘
+            let window = app.get_webview_window("main").unwrap();
             let window_clone = window.clone();
             window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api: close_api, .. } = event {
-                    close_api.prevent_close();          // 阻止窗口关闭
-                    let _ = window_clone.hide();        // 隐藏到托盘
+                    if ALLOW_EXIT.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    close_api.prevent_close();
+                    let _ = window_clone.hide();
                 }
             });
 
@@ -115,6 +123,13 @@ pub fn run() {
             api::create_qr,
             api::check_qr_status,
             api::get_login_status,
+            api::likelist,
+            api::user_record,
+            api::like_song,
+            api::record_recent_song,
+            api::playlist_subscribe,
+            api::playlist_track_all,
+            api::exit_app,
 
             audio::play_audio,
             audio::pause_audio,
@@ -125,6 +140,7 @@ pub fn run() {
             audio::seek_audio,
             audio::set_volume
         ])
+        .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
         .expect("error while running Nekosonic");
 }

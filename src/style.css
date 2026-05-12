@@ -1,14 +1,74 @@
 @import "tailwindcss";
 
+@theme {
+  --color-base: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-subtle: var(--c-subtle);
+  --color-muted: var(--c-muted);
+  --color-emphasis: var(--c-emphasis);
+  --color-content: var(--c-content);
+  --color-content-2: var(--c-content-2);
+  --color-content-3: var(--c-content-3);
+  --color-content-4: var(--c-content-4);
+  --color-line: var(--c-line);
+  --color-line-2: var(--c-line-2);
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-accent-text: var(--c-accent-text);
+  --color-accent-dim: var(--c-accent-dim);
+  --color-danger: var(--c-danger);
+  --color-danger-dim: var(--c-danger-dim);
+  --color-warning: var(--c-warning);
+  --color-info: var(--c-info);
+}
+
 @layer base {
   :root {
-    --color-surface: 255 255 255;
-    --color-primary: 34 197 94;
+    --c-bg: #030712;
+    --c-surface: #111827;
+    --c-subtle: rgba(255, 255, 255, 0.05);
+    --c-muted: rgba(255, 255, 255, 0.10);
+    --c-emphasis: rgba(255, 255, 255, 0.18);
+    --c-content: #ffffff;
+    --c-content-2: #9ca3af;
+    --c-content-3: #6b7280;
+    --c-content-4: #4b5563;
+    --c-line: rgba(255, 255, 255, 0.10);
+    --c-line-2: rgba(255, 255, 255, 0.05);
+    --c-accent: #22c55e;
+    --c-accent-hover: #16a34a;
+    --c-accent-text: #4ade80;
+    --c-accent-dim: rgba(34, 197, 94, 0.20);
+    --c-danger: #ef4444;
+    --c-danger-dim: rgba(239, 68, 68, 0.20);
+    --c-warning: #eab308;
+    --c-info: #3b82f6;
   }
 
-  /* 确保 html 也应用暗色背景，防止空白区域 */
+  [data-theme="light"] {
+    --c-bg: #f3f4f6;
+    --c-surface: #ffffff;
+    --c-subtle: rgba(0, 0, 0, 0.04);
+    --c-muted: rgba(0, 0, 0, 0.08);
+    --c-emphasis: rgba(0, 0, 0, 0.12);
+    --c-content: #111827;
+    --c-content-2: #4b5563;
+    --c-content-3: #6b7280;
+    --c-content-4: #9ca3af;
+    --c-line: rgba(0, 0, 0, 0.10);
+    --c-line-2: rgba(0, 0, 0, 0.05);
+    --c-accent: #16a34a;
+    --c-accent-hover: #15803d;
+    --c-accent-text: #16a34a;
+    --c-accent-dim: rgba(22, 163, 74, 0.15);
+    --c-danger: #dc2626;
+    --c-danger-dim: rgba(220, 38, 38, 0.15);
+    --c-warning: #ca8a04;
+    --c-info: #2563eb;
+  }
+
   html {
-    background: #0f172a;
+    background: var(--c-bg);
     overflow: hidden;
     height: 100%;
     overscroll-behavior: none;
@@ -17,17 +77,14 @@
   body {
     @apply antialiased;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-    /* 关键：锁住 body，彻底消除整体拖动 */
+    background: var(--c-bg);
     position: fixed;
     inset: 0;
     overflow: hidden;
     overscroll-behavior: none;
-    /* 阻止触控板手势触发页面导航 */
     touch-action: none;
   }
 
-  /* 自定义滚动条保持不变 */
   ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
@@ -36,10 +93,64 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--c-muted);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.4);
+    background-color: var(--c-emphasis);
+  }
+
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+    cursor: pointer;
+  }
+
+  select:focus {
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 2px var(--c-accent-dim);
+  }
+
+  select option {
+    background: var(--c-surface);
+    color: var(--c-content);
+    padding: 8px;
+  }
+
+  input[type="checkbox"] {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--c-emphasis);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  input[type="checkbox"]:hover {
+    border-color: var(--c-accent);
+  }
+
+  input[type="checkbox"]:checked {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+  }
+
+  input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
   }
 }
