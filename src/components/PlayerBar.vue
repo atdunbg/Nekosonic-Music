@@ -14,9 +14,12 @@
 
     <div class="flex items-center px-6 h-16">
       <div class="flex items-center gap-3 w-56 min-w-0">
-        <img :src="player.currentSong?.al?.picUrl"
-          class="w-10 h-10 rounded-md object-cover flex-shrink-0 cursor-pointer hover:scale-105 transition-transform"
-          @click="player.toggleRoamDrawer()" title="全屏展示" />
+        <div v-if="player.currentSong?.al?.picUrl" class="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示">
+          <img :src="player.currentSong.al.picUrl" class="w-full h-full object-cover" />
+        </div>
+        <div v-else class="w-10 h-10 rounded-md flex-shrink-0 bg-muted flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-content-3"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium truncate">{{ player.currentSong?.name }}</p>
           <p class="text-xs text-content-2 truncate">
@@ -27,6 +30,10 @@
           <svg v-if="player.currentSong && player.isLiked(player.currentSong.id)" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
         </button>
+        <button v-if="player.currentSong && !download.isDownloaded(player.currentSong!.id) && !download.isDownloading(player.currentSong!.id)" @click="download.downloadSong(player.currentSong)" class="flex-shrink-0 text-content-3 hover:text-accent-text transition" title="下载">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <svg v-if="player.currentSong && download.isDownloading(player.currentSong!.id)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 animate-spin text-content-3"><path d="M21 12a9 9 0 11-6.22-8.56"/></svg>
       </div>
 
       <div class="flex-1 flex flex-col items-center justify-center gap-1">
@@ -62,11 +69,11 @@
       <div class="w-56 flex justify-end items-center gap-2">
         <div class="flex items-center gap-1">
           <button @click="toggleMute" class="text-content-2 hover:text-content transition">
-            <svg v-if="volume === 0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+            <svg v-if="player.volume === 0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
             <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
           </button>
           <div class="relative w-20 h-6 flex items-center">
-            <input ref="volumeSlider" type="range" min="0" max="100" :value="volume"
+            <input ref="volumeSlider" type="range" min="0" max="100" :value="player.volume"
               :style="{ background: volumeBarBg }" @input="handleVolumeChange"
               class="vol-slider w-full h-1.5 rounded-full appearance-none cursor-pointer bg-emphasis outline-none" />
           </div>
@@ -120,17 +127,18 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue';
 import { usePlayerStore, PlayMode } from '../stores/player';
+import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 const player = usePlayerStore();
+const download = useDownload();
 const showQueuePanel = ref(false);
 const progressBar = ref<HTMLElement | null>(null);
 const isSeeking = ref(false);
 const previewTime = ref(0);
 const cacheProgress = ref(0);
-const volume = ref(100);
 const prevVolume = ref(100);
 
 let unlistenCache: (() => void) | null = null;
@@ -154,13 +162,13 @@ function togglePlayMode() {
 }
 
 function toggleMute() {
-  if (volume.value > 0) {
-    prevVolume.value = volume.value;
-    volume.value = 0;
+  if (player.volume > 0) {
+    prevVolume.value = player.volume;
+    player.volume = 0;
   } else {
-    volume.value = prevVolume.value || 100;
+    player.volume = prevVolume.value || 100;
   }
-  invoke('set_volume', { vol: volume.value / 100 });
+  invoke('set_volume', { vol: player.volume / 100 });
 }
 
 let onDocMove: ((e: MouseEvent) => void) | null = null;
@@ -221,17 +229,26 @@ function playFromQueue(index: number) {
 async function handleVolumeChange(e: Event) {
   const target = e.target as HTMLInputElement;
   const val = parseInt(target.value, 10);
-  volume.value = val;
+  player.volume = val;
   await invoke('set_volume', { vol: val / 100 });
 }
 
 const volumeBarBg = computed(() => {
-  const pct = volume.value;
+  const pct = player.volume;
   return `linear-gradient(to right, var(--c-accent) 0%, var(--c-accent) ${pct}%, var(--c-muted) ${pct}%)`;
 });
 </script>
 
 <style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 .slide-up-enter-active,
 .slide-up-leave-active {
   transition: all 0.2s ease;

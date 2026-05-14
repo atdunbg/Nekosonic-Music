@@ -12,9 +12,17 @@
 
     <template v-else>
       <img
-        :src="currentSong.al?.picUrl || currentSong.album?.picUrl"
+        v-if="coverUrl && !coverError"
+        :src="coverUrl"
         class="w-80 h-80 rounded-3xl object-cover shadow-2xl mb-8"
+        @error="coverError = true"
       />
+      <div
+        v-else
+        class="w-80 h-80 rounded-3xl bg-muted flex items-center justify-center shadow-2xl mb-8"
+      >
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-content-3"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </div>
 
       <h1 class="text-3xl font-bold mb-2">{{ currentSong.name }}</h1>
       <p class="text-lg text-content-2 mb-8">
@@ -46,12 +54,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { usePlayerStore } from '../stores/player';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeSong } from '../utils/song';
 
 const player = usePlayerStore();
+const coverError = ref(false);
 
 const currentSong = computed(() => {
   if (player.isFmMode && player.currentSong) {
@@ -59,6 +68,13 @@ const currentSong = computed(() => {
   }
   return null;
 });
+
+const coverUrl = computed(() => {
+  if (!currentSong.value) return '';
+  return currentSong.value.al?.picUrl || currentSong.value.album?.picUrl || '';
+});
+
+watch(coverUrl, () => { coverError.value = false; });
 
 const artists = computed(() => {
   if (!currentSong.value) return '';

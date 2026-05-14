@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { normalizeSong } from '../utils/song';
 import { useSettingsStore } from './settings';
 import { useUserStore } from './user';
+import { showToast } from '../composables/useToast';
 
 export type PlayMode = 'loop' | 'shuffle' | 'repeat-one';
 
@@ -11,18 +12,17 @@ export interface Song {
   id: number;
   name: string;
   ar: { name: string }[];
-  al: { picUrl: string };
+  al: { picUrl: string; name?: string };
   dt?: number;
 
-  // 兼容不同接口返回的可选字段
-  album?: { picUrl?: string };
+  album?: { picUrl?: string; name?: string };
   artists?: { name: string }[];
-  duration?: number;   // 某些接口的时长字段（单位可能是秒）
+  duration?: number;
+  localPath?: string;
 }
 
 const cacheProgress = ref(0);
 
-// 监听 Tauri 事件（需要在适当位置初始化一次）
 import { listen } from '@tauri-apps/api/event';
 
 export function setupCacheProgressListener() {
@@ -30,9 +30,6 @@ export function setupCacheProgressListener() {
     cacheProgress.value = event.payload;
   });
 }
-
-// 在 store 定义外调用 setupCacheProgressListener()，或者在应用入口调用
-
 
 function loadRecentLocal(): Song[] {
   try {
@@ -58,6 +55,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const queue = ref<Song[]>([]);
   const currentIndex = ref(-1);
+  const volume = ref(100);
 
   let tickInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -124,9 +122,11 @@ export const usePlayerStore = defineStore('player', () => {
     fmNextCallback = null;
   }
 
-  // 播放私人漫游歌曲（清空队列，只播放这一首）
+  let fmVipSkipCount = 0;
+  const MAX_FM_VIP_SKIP = 10;
+
   async function playFmSong(song: any) {
-    // 如果缺少时长，尝试从详情接口获取
+    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
     if (!song.dt || song.dt === 0) {
       try {
         const jsonStr: string = await invoke('get_song_detail', { id: String(song.id) });
@@ -145,12 +145,36 @@ export const usePlayerStore = defineStore('player', () => {
     currentIndex.value = -1;
     playing.value = false;
 
+    fmSong.value = song;
     currentSong.value = song;
     try {
       const settings = useSettingsStore();
-      const url: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
+      const jsonStr: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality, fm_mode: true } });
+      const data = JSON.parse(jsonStr);
+      const url: string | undefined = data.url;
       if (!url) throw new Error('无播放源');
+
+      if (data.freeTrialInfo) {
+        console.warn('FM VIP 试听歌曲，自动跳过', song.name);
+        showToast(`${song.name} 为 VIP 试听，已跳过`, 'info');
+        fmVipSkipCount++;
+        if (fmVipSkipCount >= MAX_FM_VIP_SKIP) {
+          console.warn('FM 连续跳过 VIP 歌曲过多，停止');
+          fmVipSkipCount = 0;
+          disableFmMode();
+          return;
+        }
+        if (fmNextCallback) {
+          fmNextCallback();
+        } else {
+          disableFmMode();
+        }
+        return;
+      }
+
+      fmVipSkipCount = 0;
       await invoke('play_audio', { url });
+      await waitForAudioStart();
       playing.value = true;
       duration.value = (song.dt || 0) / 1000;
       currentTime.value = 0;
@@ -159,16 +183,19 @@ export const usePlayerStore = defineStore('player', () => {
     } catch (e) {
       console.error('FM播放失败', e);
       playing.value = false;
+      if (fmNextCallback) {
+        fmNextCallback();
+      } else {
+        disableFmMode();
+      }
     }
   }
 
-  // 播放指定歌曲（如果不在队列中则加入并切换）
   async function play(song: Song) {
     disableFmMode();
 
     const idx = queue.value.findIndex(s => s.id === song.id);
     if (idx === -1) {
-      // 未在队列中，添加到队列并播放该位置
       queue.value.push(song);
       currentIndex.value = queue.value.length - 1;
     } else {
@@ -177,7 +204,34 @@ export const usePlayerStore = defineStore('player', () => {
     await playCurrent();
   }
 
+  async function playFromList(songs: Song[], startIndex: number) {
+    disableFmMode();
+    if (songs.length === 0) return;
+    queue.value = [...songs];
+    currentIndex.value = Math.max(0, Math.min(startIndex, songs.length - 1));
+    await playCurrent();
+  }
+
+  let vipSkipCount = 0;
+  const MAX_VIP_SKIP = 10;
+
+  let audioStartedResolve: (() => void) | null = null;
+
+  listen('audio-started', () => {
+    if (audioStartedResolve) {
+      audioStartedResolve();
+      audioStartedResolve = null;
+    }
+  });
+
+  function waitForAudioStart(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      audioStartedResolve = resolve;
+    });
+  }
+
   async function playCurrent() {
+    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
     const song = queue.value[currentIndex.value];
     if (!song?.id) {
       console.error('无效的歌曲数据', song);
@@ -185,23 +239,49 @@ export const usePlayerStore = defineStore('player', () => {
     }
 
     try {
-      // 重置状态
       currentSong.value = song;
       playing.value = false;
       currentTime.value = 0;
-      duration.value = (song.dt || 0) / 1000;
+      duration.value = (song.dt || song.duration || 0) / 1000;
+
+      if (song.localPath) {
+        await invoke('play_local_audio', { path: song.localPath });
+        await waitForAudioStart();
+        playing.value = true;
+        startTick();
+        addRecent(song);
+        return;
+      }
 
       const settings = useSettingsStore();
-      const url: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
+      const jsonStr: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
+      const data = JSON.parse(jsonStr);
+      const url: string | undefined = data.url;
+
       if (!url) {
         console.error('未获取到有效播放地址', song);
         return;
       }
 
+      if (data.freeTrialInfo) {
+        console.warn('VIP 试听歌曲，自动跳过', song.name);
+        showToast(`${song.name} 为 VIP 试听，已跳过`, 'info');
+        vipSkipCount++;
+        if (vipSkipCount >= MAX_VIP_SKIP) {
+          console.warn('连续跳过 VIP 歌曲过多，停止跳过');
+          vipSkipCount = 0;
+          return;
+        }
+        next();
+        return;
+      }
+
       await invoke('play_audio', { url });
+      await waitForAudioStart();
       playing.value = true;
       startTick();
       addRecent(song);
+      vipSkipCount = 0;
     } catch (e) {
       console.error('播放失败', e);
       playing.value = false;
@@ -215,7 +295,8 @@ export const usePlayerStore = defineStore('player', () => {
         currentTime.value += 0.25;
         if (currentTime.value >= duration.value) {
           currentTime.value = duration.value;
-          next(); // 自动下一首
+          if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+          next();
         }
       }
     }, 250);
@@ -237,7 +318,7 @@ export const usePlayerStore = defineStore('player', () => {
     currentSong.value = null;
     currentTime.value = 0;
     if (tickInterval) clearInterval(tickInterval);
-    disableFmMode(); // 停止时退出漫游
+    disableFmMode();
   }
 
 
@@ -248,7 +329,6 @@ export const usePlayerStore = defineStore('player', () => {
     playCurrent();
   }
 
-  // 批量添加歌曲到队列并播放第一首（用于“播放全部”）
   async function playAll(songs: Song[]) {
     if (songs.length === 0) return;
     queue.value = [...songs];
@@ -260,22 +340,17 @@ export const usePlayerStore = defineStore('player', () => {
     if (index < 0 || index >= queue.value.length) return;
     const isCurrent = index === currentIndex.value;
     if (isCurrent) {
-      // 如果移除的是当前正在播放的歌曲，先停止，然后调整索引
       stop();
       queue.value.splice(index, 1);
-      // 如果队列变空，则重置
       if (queue.value.length === 0) {
         currentIndex.value = -1;
         return;
       }
-      // 保持索引不变，但如果删的是最后一个，索引需要退一位
       if (currentIndex.value >= queue.value.length) {
         currentIndex.value = queue.value.length - 1;
       }
-      // 不自动播放，等用户手动选择
     } else {
       queue.value.splice(index, 1);
-      // 调整当前索引
       if (index < currentIndex.value) {
         currentIndex.value -= 1;
       }
@@ -297,15 +372,19 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  async function adjustVolume(delta: number) {
+    const newVol = Math.max(0, Math.min(100, volume.value + delta));
+    volume.value = newVol;
+    await invoke('set_volume', { vol: newVol / 100 });
+  }
 
-  // 在 defineStore 内部添加
+
   const playMode = ref<PlayMode>('loop');
 
   function setPlayMode(mode: PlayMode) {
     playMode.value = mode;
   }
 
-  // 重写 next() 以根据模式选择下一首
   function next() {
     if (isFmMode.value && fmNextCallback) {
       fmNextCallback();
@@ -316,11 +395,9 @@ export const usePlayerStore = defineStore('player', () => {
     let nextIndex: number;
     switch (playMode.value) {
       case 'repeat-one':
-        // 单曲循环，不改变索引，只重新播放当前
         playCurrent();
         return;
       case 'shuffle':
-        // 随机下一首，且不与当前重复（除非只剩一首）
         if (queue.value.length === 1) {
           nextIndex = 0;
         } else {
@@ -331,7 +408,6 @@ export const usePlayerStore = defineStore('player', () => {
         break;
       case 'loop':
       default:
-        // 顺序循环
         nextIndex = (currentIndex.value + 1) % queue.value.length;
         break;
     }
@@ -360,7 +436,7 @@ export const usePlayerStore = defineStore('player', () => {
     const songs = data.data || data;
     if (songs && songs.length > 0) {
       const song = normalizeSong(songs[0]);
-      enableFmMode(() => loadFirstFmSong()); // 下一首回调
+      enableFmMode(() => loadFirstFmSong());
       await playFmSong(song);
       return true;
     }
@@ -383,10 +459,9 @@ async function loadFm() {
     if (songs && songs.length > 0) {
       const song = normalizeSong(songs[0]);
       fmSong.value = song;
-      enableFmMode(nextFm);      // 设置下一首回调为 store 内的 nextFm
-      await playFmSong(song);   // 使用 FM 专用播放方法
+      enableFmMode(nextFm);
+      await playFmSong(song);
       fmPlaying.value = true;
-      // showRoamDrawer.value = true; // 自动打开全屏抽屉
     }
   } catch (e) {
     console.error('FM加载失败', e);
@@ -396,17 +471,13 @@ async function loadFm() {
 async function toggleFm() {
   if (!fmSong.value) return;
   if (fmPlaying.value) {
-    // 当前 FM 正在播放，切换暂停/恢复
-    await toggle(); // 全局暂停/播放
+    await toggle();
     fmPlaying.value = playing.value;
   } else {
-    // FM 处于暂停状态，或者当前被其他歌曲打断
     if (currentSong.value?.id === fmSong.value.id) {
-      // FM 歌曲还是当前歌曲，直接恢复
       await toggle();
       fmPlaying.value = playing.value;
     } else {
-      // 当前播放的是其他歌曲，重新以 FM 模式播放 FM 歌曲
       enableFmMode(nextFm);
       await playFmSong(fmSong.value);
       fmPlaying.value = true;
@@ -415,20 +486,28 @@ async function toggleFm() {
 }
 
 async function nextFm() {
-  await loadFm(); // 加载下一首 FM 歌曲
+  await loadFm();
 }
 
-// 监听全局播放变化，若用户选择了非 FM 歌曲，自动退出 FM 状态
+listen('audio-ended', () => {
+  if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+  if (isFmMode.value && fmNextCallback) {
+    fmNextCallback();
+    return;
+  }
+  if (playing.value && !isFmMode.value) {
+    next();
+  }
+});
+
 watch(currentSong, (newSong) => {
   if (isFmMode.value && newSong?.id !== fmSong.value?.id) {
     fmPlaying.value = false;
-    // 注意：不调用 disableFmMode，因为可能只是临时切歌，但卡片需要知道 FM 已停止
-    disableFmMode(); // 退出 FM 模式，让上一首按钮恢复
+    disableFmMode();
   }
 });
 
 watch(playing, (val) => {
-  // 只有当前正在播放的是 FM 歌曲时，才同步 fmPlaying
   if (currentSong.value?.id === fmSong.value?.id) {
     fmPlaying.value = val;
   } else {
@@ -451,6 +530,7 @@ watch(playing, (val) => {
     playFmSong,
     setPlayMode,
     play,
+    playFromList,
     playAll,
     toggle,
     stop,
@@ -458,6 +538,8 @@ watch(playing, (val) => {
     next,
     seek,
     playCurrent,
+    volume,
+    adjustVolume,
 
     removeFromQueue,
     clearQueue,

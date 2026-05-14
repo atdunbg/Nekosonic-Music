@@ -56,6 +56,7 @@ pub fn run() {
                         "show" => {
                             window.show().unwrap();
                             window.set_focus().unwrap();
+                            let _ = app.emit("window-shown", ());
                         }
                         "play_pause" => {
                             let _ = app.emit("tray-play-pause", ());
@@ -86,6 +87,7 @@ pub fn run() {
                         let window = app.get_webview_window("main").unwrap();
                         window.show().unwrap();
                         window.set_focus().unwrap();
+                        let _ = app.emit("window-shown", ());
                     }
                 })
                 .build(app)?;
@@ -93,6 +95,7 @@ pub fn run() {
             // 点击关闭按钮时隐藏到托盘
             let window = app.get_webview_window("main").unwrap();
             let window_clone = window.clone();
+            let app_handle = app.handle().clone();
             window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api: close_api, .. } = event {
                     if ALLOW_EXIT.load(Ordering::SeqCst) {
@@ -100,6 +103,7 @@ pub fn run() {
                     }
                     close_api.prevent_close();
                     let _ = window_clone.hide();
+                    let _ = app_handle.emit("window-hidden", ());
                 }
             });
 
@@ -132,20 +136,31 @@ pub fn run() {
             api::exit_app,
 
             audio::play_audio,
+            audio::play_local_audio,
             audio::pause_audio,
             audio::resume_audio,
             audio::stop_audio,
             audio::get_output_devices,
             audio::set_output_device,
             audio::seek_audio,
-            audio::set_volume
+            audio::set_volume,
+
+            api::download_song,
+            api::list_local_songs,
+            api::delete_local_song,
+            api::check_local_song,
+            api::get_default_download_path
         ])
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
                 let _ = window.unminimize();
+                let _ = app.emit("window-shown", ());
             }
         }))
         .run(tauri::generate_context!())

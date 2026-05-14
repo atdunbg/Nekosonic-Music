@@ -76,6 +76,11 @@
           <svg v-if="player.isLiked(song.id)" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="text-danger"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
         </button>
+        <button @click.stop="download.downloadSong(song)" class="text-content-3 hover:text-accent-text transition flex-shrink-0" :title="download.isDownloaded(song.id) ? '已下载' : '下载'">
+          <svg v-if="download.isDownloading(song.id)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin"><path d="M21 12a9 9 0 11-6.22-8.56"/></svg>
+          <svg v-else-if="download.isDownloaded(song.id)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-accent-text"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
         <span class="text-xs text-content-3">{{ formatDuration(song.dt) }}</span>
       </div>
     </div>
@@ -88,12 +93,14 @@ import { useRoute } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayerStore } from '../stores/player';
 import { useUserStore } from '../stores/user';
+import { useDownload } from '../composables/useDownload';
 import { showToast } from '../composables/useToast';
 import { formatDuration, formatPlayCount } from '../utils/format';
 
 const route = useRoute();
 const player = usePlayerStore();
 const userStore = useUserStore();
+const download = useDownload();
 
 const playlist = ref<any>(null);
 const songs = ref<any[]>([]);
@@ -136,7 +143,8 @@ function isCurrentSong(songId: number): boolean {
 }
 
 async function playSingle(song: any) {
-  player.play(song);
+  const idx = songs.value.findIndex((s: any) => s.id === song.id);
+  player.playFromList(songs.value, idx >= 0 ? idx : 0);
 }
 
 function playAll() {

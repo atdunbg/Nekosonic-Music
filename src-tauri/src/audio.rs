@@ -1,8 +1,8 @@
 use rodio::{Decoder, OutputStream, Sink, Source};
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
-use std::io::Cursor;
+use std::io::{Read, Seek, SeekFrom};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::AppHandle;
@@ -11,6 +11,7 @@ use tauri::Emitter;
 // ---------- 命令 ----------
 enum AudioCmd {
     Play(String),
+    PlayLocal(String),
     Pause,
     Resume,
     Stop,
@@ -26,20 +27,24 @@ pub struct AudioController {
 
 impl AudioController {
     pub fn new(app_handle: AppHandle) -> Self {
-    let (tx, rx) = channel();
-    let current_url = Arc::new(Mutex::new(None));
-    let url_clone = current_url.clone();
-    let ah_clone = app_handle.clone();   // 克隆一个用于闭包
-    thread::spawn(move || audio_thread(rx, url_clone, ah_clone));
-    AudioController {
-        tx,
-        current_url,
+        let (tx, rx) = channel();
+        let current_url = Arc::new(Mutex::new(None));
+        let url_clone = current_url.clone();
+        let ah_clone = app_handle.clone();
+        thread::spawn(move || audio_thread(rx, url_clone, ah_clone));
+        AudioController {
+            tx,
+            current_url,
+        }
     }
-}
 
     pub fn play_url(&self, url: &str) {
         *self.current_url.lock().unwrap() = Some(url.to_string());
         let _ = self.tx.send(AudioCmd::Play(url.to_string()));
+    }
+    pub fn play_local(&self, path: &str) {
+        *self.current_url.lock().unwrap() = Some(path.to_string());
+        let _ = self.tx.send(AudioCmd::PlayLocal(path.to_string()));
     }
     pub fn pause(&self) { let _ = self.tx.send(AudioCmd::Pause); }
     pub fn resume(&self) { let _ = self.tx.send(AudioCmd::Resume); }
@@ -55,43 +60,178 @@ impl AudioController {
     }
 }
 
-use std::io::Read;
+// ---------- 流式缓冲区 ----------
 
-fn download_audio_with_progress(
+struct BufferState {
+    bytes: Vec<u8>,
+    done: bool,
+    cancelled: bool,
+}
+
+struct SharedBuffer {
+    state: Mutex<BufferState>,
+    available: Condvar,
+}
+
+impl SharedBuffer {
+    fn new() -> Self {
+        SharedBuffer {
+            state: Mutex::new(BufferState {
+                bytes: Vec::new(),
+                done: false,
+                cancelled: false,
+            }),
+            available: Condvar::new(),
+        }
+    }
+
+    fn write_chunk(&self, chunk: &[u8]) {
+        let mut state = self.state.lock().unwrap();
+        state.bytes.extend_from_slice(chunk);
+        self.available.notify_all();
+    }
+
+    fn mark_done(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.done = true;
+        self.available.notify_all();
+    }
+
+    fn cancel(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.cancelled = true;
+        self.available.notify_all();
+    }
+
+    fn len(&self) -> usize {
+        self.state.lock().unwrap().bytes.len()
+    }
+
+    fn is_done(&self) -> bool {
+        self.state.lock().unwrap().done
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.state.lock().unwrap().cancelled
+    }
+}
+
+struct StreamingReader {
+    buffer: Arc<SharedBuffer>,
+    pos: usize,
+}
+
+impl StreamingReader {
+    fn new(buffer: Arc<SharedBuffer>) -> Self {
+        StreamingReader { buffer, pos: 0 }
+    }
+}
+
+impl Read for StreamingReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let mut state = self.buffer.state.lock().unwrap();
+        loop {
+            let available = state.bytes.len().saturating_sub(self.pos);
+            if available > 0 {
+                let to_read = std::cmp::min(buf.len(), available);
+                buf[..to_read].copy_from_slice(&state.bytes[self.pos..self.pos + to_read]);
+                self.pos += to_read;
+                return Ok(to_read);
+            }
+            if state.done {
+                return Ok(0);
+            }
+            if state.cancelled {
+                return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "cancelled"));
+            }
+            let result = self.buffer.available.wait_timeout(state, Duration::from_millis(500)).unwrap();
+            state = result.0;
+        }
+    }
+}
+
+impl Seek for StreamingReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let new_pos = match pos {
+            SeekFrom::Start(offset) => offset as i64,
+            SeekFrom::Current(offset) => self.pos as i64 + offset,
+            SeekFrom::End(offset) => {
+                let mut state = self.buffer.state.lock().unwrap();
+                loop {
+                    if state.done {
+                        break state.bytes.len() as i64 + offset;
+                    }
+                    if state.cancelled {
+                        return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "cancelled"));
+                    }
+                    let result = self.buffer.available.wait_timeout(state, Duration::from_millis(500)).unwrap();
+                    state = result.0;
+                }
+            }
+        };
+        if new_pos < 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek before start"));
+        }
+        let mut state = self.buffer.state.lock().unwrap();
+        loop {
+            if new_pos as usize <= state.bytes.len() {
+                self.pos = new_pos as usize;
+                return Ok(self.pos as u64);
+            }
+            if state.done {
+                return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek past end"));
+            }
+            if state.cancelled {
+                return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "cancelled"));
+            }
+            let result = self.buffer.available.wait_timeout(state, Duration::from_millis(500)).unwrap();
+            state = result.0;
+        }
+    }
+}
+
+fn download_audio_streaming(
     url: &str,
+    buffer: &SharedBuffer,
     app_handle: &AppHandle,
-) -> Result<Vec<u8>, String> {
+) -> Result<(), String> {
     let resp = reqwest::blocking::get(url)
         .map_err(|e| format!("下载失败: {}", e))?;
 
+    if !resp.status().is_success() {
+        return Err(format!("HTTP 错误: {}", resp.status()));
+    }
+
     let total_size = resp.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
-    let mut buffer = Vec::new();
     let mut reader = resp;
 
     loop {
+        if buffer.is_cancelled() {
+            return Err("下载已取消".to_string());
+        }
+
         let mut chunk = [0u8; 8192];
         let read_size = reader.read(&mut chunk)
             .map_err(|e| format!("读取失败: {}", e))?;
         if read_size == 0 {
             break;
         }
-        buffer.extend_from_slice(&chunk[..read_size]);
+        buffer.write_chunk(&chunk[..read_size]);
         downloaded += read_size as u64;
 
-        // 发送进度事件给前端（每 8192 字节发一次，不必太频繁）
         let progress = if total_size > 0 {
             (downloaded as f64 / total_size as f64) * 100.0
         } else {
-            0.0 // 未知大小时为 0
+            0.0
         };
         let _ = app_handle.emit("cache-progress", progress);
     }
 
-    // 下载完成，确保进度为 100
-    let _ = app_handle.emit("cache-progress", 100f64);
-    Ok(buffer)
+    Ok(())
 }
+
+const INITIAL_BUFFER_SIZE: usize = 65536;
 
 // ---------- 音频线程 ----------
 fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>, app_handle: AppHandle) {
@@ -104,47 +244,148 @@ fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>,
         sink.set_volume(current_volume);
     }
 
-    let mut current_audio_data: Option<Vec<u8>> = None;  // 缓存原始音频字节
+    let mut current_audio_buffer: Option<Arc<SharedBuffer>> = None;
+    let mut audio_active = false;
+    let mut audio_paused = false;
+    let mut manual_stop = false;
 
     loop {
         match rx.recv_timeout(Duration::from_millis(200)) {
             Ok(cmd) => {
                 match cmd {
                     AudioCmd::Play(url) => {
-                        // 停止旧播放并重建干净输出
-                        if let Some(ref sink) = output.sink {
-                            sink.stop();
+                        audio_active = false;
+                        audio_paused = false;
+                        manual_stop = false;
+                        if let Some(ref buf) = current_audio_buffer {
+                            buf.cancel();
                         }
+                        if let Some(ref sink) = output.sink { sink.stop(); }
                         output = create_output(&selected_device);
                         if let Some(ref sink) = output.sink {
                             sink.set_volume(current_volume);
 
-                            match download_audio_with_progress(&url, &app_handle) {
-                                Ok(bytes) => {
-                                    current_audio_data = Some(bytes.clone());
-                                    let play_res = play_bytes(&bytes, sink);
-                                    if let Err(e) = play_res {
-                                        eprintln!("[audio] 播放失败: {}", e);
+                            let buffer = Arc::new(SharedBuffer::new());
+                            current_audio_buffer = Some(buffer.clone());
+
+                            let buffer_clone = buffer.clone();
+                            let ah_clone = app_handle.clone();
+                            let url_clone = url.clone();
+                            thread::spawn(move || {
+                                if let Err(e) = download_audio_streaming(&url_clone, &buffer_clone, &ah_clone) {
+                                    if !buffer_clone.is_cancelled() {
+                                        eprintln!("[audio] 流式下载失败: {}", e);
                                     }
                                 }
-                                Err(e) => eprintln!("[audio] 下载失败: {}", e),
+                                buffer_clone.mark_done();
+                            });
+
+                            loop {
+                                let len = buffer.len();
+                                if len >= INITIAL_BUFFER_SIZE || buffer.is_done() || buffer.is_cancelled() {
+                                    break;
+                                }
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
+
+                            if buffer.is_cancelled() || buffer.len() == 0 {
+                                current_audio_buffer = None;
+                                continue;
+                            }
+
+                            let reader = StreamingReader::new(buffer.clone());
+                            match Decoder::new(reader) {
+                                Ok(source) => {
+                                    sink.append(source);
+                                    sink.play();
+                                    audio_active = true;
+                                    let _ = app_handle.emit("audio-started", ());
+                                }
+                                Err(e) => {
+                                    eprintln!("[audio] 流式解码失败: {}, 等待完整下载后重试", e);
+                                    loop {
+                                        if buffer.is_done() || buffer.is_cancelled() {
+                                            break;
+                                        }
+                                        std::thread::sleep(Duration::from_millis(100));
+                                    }
+                                    if buffer.is_cancelled() || buffer.len() == 0 {
+                                        current_audio_buffer = None;
+                                        continue;
+                                    }
+                                    let buf = current_audio_buffer.as_ref().unwrap().clone();
+                                    let reader2 = StreamingReader::new(buf);
+                                    match Decoder::new(reader2) {
+                                        Ok(source) => {
+                                            sink.append(source);
+                                            sink.play();
+                                            audio_active = true;
+                                            let _ = app_handle.emit("audio-started", ());
+                                        }
+                                        Err(e2) => {
+                                            eprintln!("[audio] 完整下载后解码也失败: {}", e2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    AudioCmd::PlayLocal(path) => {
+                        audio_active = false;
+                        audio_paused = false;
+                        manual_stop = false;
+                        if let Some(ref buf) = current_audio_buffer {
+                            buf.cancel();
+                        }
+                        if let Some(ref sink) = output.sink { sink.stop(); }
+                        output = create_output(&selected_device);
+                        if let Some(ref sink) = output.sink {
+                            sink.set_volume(current_volume);
+
+                            match std::fs::read(&path) {
+                                Ok(bytes) => {
+                                    let buffer = Arc::new(SharedBuffer::new());
+                                    buffer.write_chunk(&bytes);
+                                    buffer.mark_done();
+                                    current_audio_buffer = Some(buffer.clone());
+
+                                    let reader = StreamingReader::new(buffer);
+                                    match Decoder::new(reader) {
+                                        Ok(source) => {
+                                            sink.append(source);
+                                            sink.play();
+                                            audio_active = true;
+                                            let _ = app_handle.emit("audio-started", ());
+                                        }
+                                        Err(e) => eprintln!("[audio] 本地播放失败: {}", e),
+                                    }
+                                }
+                                Err(e) => eprintln!("[audio] 读取本地文件失败: {}", e),
                             }
                         }
                     }
 
                     AudioCmd::Pause => {
+                        audio_paused = true;
                         if let Some(ref sink) = output.sink { sink.pause(); }
                     }
                     AudioCmd::Resume => {
+                        audio_paused = false;
                         if let Some(ref sink) = output.sink { sink.play(); }
                     }
                     AudioCmd::Stop => {
+                        audio_active = false;
+                        audio_paused = false;
+                        manual_stop = true;
+                        if let Some(ref buf) = current_audio_buffer {
+                            buf.cancel();
+                        }
                         if let Some(ref sink) = output.sink { sink.stop(); }
                     }
 
                     AudioCmd::Seek(time) => {
                         if let Some(ref sink) = output.sink {
-                            // 优先尝试高效的 sink.try_seek（毫秒级）
                             let seek_res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                 sink.try_seek(Duration::from_secs_f64(time))
                             }));
@@ -153,19 +394,34 @@ fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>,
                                 Ok(Ok(_)) => { /* 成功 */ }
                                 Ok(Err(e)) => {
                                     eprintln!("[audio] try_seek 失败: {:?}, 回退重建解码", e);
-                                    // 回退方案：重新解码并从目标时间开始
-                                    if let Some(ref bytes) = current_audio_data {
+                                    if let Some(ref buffer) = current_audio_buffer {
                                         sink.stop();
                                         sink.clear();
-                                        let _ = play_bytes_with_seek(bytes, sink, time);
+                                        let reader = StreamingReader::new(buffer.clone());
+                                        match Decoder::new(reader) {
+                                            Ok(source) => {
+                                                let source = source.skip_duration(Duration::from_secs_f64(time));
+                                                sink.append(source);
+                                                sink.play();
+                                            }
+                                            Err(e) => eprintln!("[audio] seek 解码失败: {}", e),
+                                        }
                                     }
                                 }
                                 Err(_) => {
                                     eprintln!("[audio] try_seek 崩溃，回退重建解码");
-                                    if let Some(ref bytes) = current_audio_data {
+                                    if let Some(ref buffer) = current_audio_buffer {
                                         sink.stop();
                                         sink.clear();
-                                        let _ = play_bytes_with_seek(bytes, sink, time);
+                                        let reader = StreamingReader::new(buffer.clone());
+                                        match Decoder::new(reader) {
+                                            Ok(source) => {
+                                                let source = source.skip_duration(Duration::from_secs_f64(time));
+                                                sink.append(source);
+                                                sink.play();
+                                            }
+                                            Err(e) => eprintln!("[audio] seek 解码失败: {}", e),
+                                        }
                                     }
                                 }
                             }
@@ -184,10 +440,16 @@ fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>,
                         output = create_output(&selected_device);
                         if let Some(ref sink) = output.sink {
                             sink.set_volume(current_volume);
-                            // 如果正在播放，恢复播放
                             if current_url.lock().unwrap().is_some() {
-                                if let Some(ref bytes) = current_audio_data {
-                                    let _ = play_bytes(bytes, sink);
+                                if let Some(ref buffer) = current_audio_buffer {
+                                    let reader = StreamingReader::new(buffer.clone());
+                                    match Decoder::new(reader) {
+                                        Ok(source) => {
+                                            sink.append(source);
+                                            sink.play();
+                                        }
+                                        Err(e) => eprintln!("[audio] 设备切换解码失败: {}", e),
+                                    }
                                 }
                             }
                         }
@@ -199,7 +461,16 @@ fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>,
             }
 
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                // 跟随系统默认设备变化
+                if audio_active && !audio_paused {
+                    if let Some(ref sink) = output.sink {
+                        if sink.empty() {
+                            audio_active = false;
+                            if !manual_stop {
+                                let _ = app_handle.emit("audio-ended", ());
+                            }
+                        }
+                    }
+                }
                 if selected_device.is_none() {
                     let current_default = get_system_default_device_name();
                     if current_default != last_default_name {
@@ -208,8 +479,12 @@ fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>,
                         output = create_output(&selected_device);
                         if let Some(ref sink) = output.sink {
                             sink.set_volume(current_volume);
-                            if let Some(ref bytes) = current_audio_data {
-                                let _ = play_bytes(bytes, sink);
+                            if let Some(ref buffer) = current_audio_buffer {
+                                let reader = StreamingReader::new(buffer.clone());
+                                let _ = Decoder::new(reader).map(|source| {
+                                    sink.append(source);
+                                    sink.play();
+                                });
                             }
                         }
                     }
@@ -220,28 +495,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, current_url: Arc<Mutex<Option<String>>>,
     }
 }
 
-// ---------- 播放辅助函数 ----------
-
-/// 直接播放字节数据
-fn play_bytes(bytes: &[u8], sink: &Sink) -> Result<(), String> {
-    let cursor = Cursor::new(bytes.to_vec());
-    let source = Decoder::new(cursor).map_err(|e| format!("解码失败: {}", e))?;
-    sink.append(source);
-    sink.play();
-    Ok(())
-}
-
-/// 播放字节数据并跳过指定秒数（用于 seek 回退）
-fn play_bytes_with_seek(bytes: &[u8], sink: &Sink, seek_secs: f64) -> Result<(), String> {
-    let cursor = Cursor::new(bytes.to_vec());
-    let source = Decoder::new(cursor).map_err(|e| format!("解码失败: {}", e))?;
-    let source = source.skip_duration(Duration::from_secs_f64(seek_secs));
-    sink.append(source);
-    sink.play();
-    Ok(())
-}
-
-// ---------- 其余函数保持不变（获取设备、创建输出等） ----------
+// ---------- 其余函数保持不变 ----------
 
 fn get_system_default_device_name() -> Option<String> {
     rodio::cpal::default_host()
@@ -337,6 +591,13 @@ pub struct AppAudio(pub StdMutex<AudioController>);
 pub fn play_audio(state: State<'_, AppAudio>, url: String) -> Result<(), String> {
     let ctrl = state.0.lock().map_err(|e| e.to_string())?;
     ctrl.play_url(&url);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn play_local_audio(state: State<'_, AppAudio>, path: String) -> Result<(), String> {
+    let ctrl = state.0.lock().map_err(|e| e.to_string())?;
+    ctrl.play_local(&path);
     Ok(())
 }
 

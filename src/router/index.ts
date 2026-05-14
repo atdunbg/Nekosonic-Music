@@ -6,6 +6,7 @@ import Login from '@/views/Login.vue';
 import FavoriteSongs from '@/views/FavoriteSongs.vue';
 import RecentPlays from '@/views/RecentPlays.vue';
 import DailySongs from '@/views/DailySongs.vue';
+import LocalMusic from '@/views/LocalMusic.vue';
 import Settings from '@/views/Settings.vue';
 
 
@@ -17,6 +18,7 @@ const routes = [
   { path: '/favorites', name: 'favorites', component: FavoriteSongs },
   { path: '/recent', name: 'recent', component: RecentPlays },
   { path: '/daily', name: 'daily', component: DailySongs },
+  { path: '/local-music', name: 'local-music', component: LocalMusic },
   { path: '/login', name: 'login', component: Login },
   { path: '/playlist/:id', name: 'playlist', component: PlaylistDetail },
   { path: '/settings', name: 'settings', component: Settings },

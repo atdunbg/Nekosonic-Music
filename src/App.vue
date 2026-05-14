@@ -12,7 +12,7 @@
       </div>
     </div>
 
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden" v-if="windowVisible">
       <nav class="w-56 flex-shrink-0 flex flex-col bg-surface/80 backdrop-blur">
         <div class="flex-1 p-4 overflow-y-auto min-h-0">
           <div class="flex flex-col min-h-full">
@@ -51,6 +51,12 @@
                 active-class="!text-content !bg-muted">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                 最近播放
+              </router-link>
+              <router-link to="/local-music"
+                class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
+                active-class="!text-content !bg-muted">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                本地音乐
               </router-link>
             </div>
           </div>
@@ -127,7 +133,7 @@
 
     <Transition name="drawer">
       <div
-        v-if="player.showRoamDrawer"
+        v-if="windowVisible && player.showRoamDrawer"
         class="fixed inset-0 z-50 flex flex-col backdrop-blur-xl bg-black/80"
       >
         <div class="h-10 flex items-center justify-between px-4 flex-shrink-0" data-tauri-drag-region>
@@ -143,9 +149,17 @@
         <div class="flex-1 min-h-0 flex px-8 pb-8 gap-0">
           <div class="w-2/5 flex flex-col items-center justify-center flex-shrink-0">
             <img
-              :src="roamSong?.al?.picUrl || roamSong?.album?.picUrl"
+              v-if="roamCoverUrl && !roamCoverError"
+              :src="roamCoverUrl"
               class="w-72 h-72 rounded-3xl object-cover shadow-2xl mb-4"
+              @error="roamCoverError = true"
             />
+            <div
+              v-else
+              class="w-72 h-72 rounded-3xl bg-white/10 flex items-center justify-center shadow-2xl mb-4"
+            >
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-white/30"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
             <h1 class="text-2xl font-bold text-white text-center">{{ roamSong?.name }}</h1>
             <p class="text-content-2 mt-2 text-center">{{ roamArtists }}</p>
           </div>
@@ -228,6 +242,7 @@ import { usePlayerStore } from './stores/player';
 import { useLyric } from './composables/UserLyric';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
+import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
 
 const router = useRouter();
 const route = useRoute();
@@ -242,6 +257,7 @@ const showSubPlaylists = ref(true);
 const searchQuery = ref('');
 const showCloseModal = ref(false);
 const closeDontAskAgain = ref(false);
+const windowVisible = ref(true);
 
 watch(() => settings.theme, (val) => {
   document.documentElement.setAttribute('data-theme', val);
@@ -257,6 +273,12 @@ const lyricScrollContainer = ref<HTMLElement | null>(null);
 const roamLyricHovering = ref(false);
 const roamLyricPadPx = ref(0);
 const roamSong = computed(() => player.currentSong);
+const roamCoverError = ref(false);
+const roamCoverUrl = computed(() => {
+  if (!roamSong.value) return '';
+  return roamSong.value.al?.picUrl || roamSong.value.album?.picUrl || '';
+});
+watch(roamCoverUrl, () => { roamCoverError.value = false; });
 let roamResizeObserver: ResizeObserver | null = null;
 
 function updateRoamLyricPad() {
@@ -416,13 +438,58 @@ onMounted(() => {
   const unlisten3 = listen('tray-prev', () => {
     player.prev();
   });
+  const unlisten4 = listen('window-hidden', () => {
+    windowVisible.value = false;
+  });
+  const unlisten5 = listen('window-shown', () => {
+    windowVisible.value = true;
+  });
 
   onBeforeUnmount(() => {
     unlisten1.then(fn => fn());
     unlisten2.then(fn => fn());
     unlisten3.then(fn => fn());
+    unlisten4.then(fn => fn());
+    unlisten5.then(fn => fn());
   });
 });
+
+async function registerGlobalShortcuts() {
+  const globalActions: Record<string, () => void> = {
+    globalPrev: () => player.prev(),
+    globalNext: () => player.next(),
+    globalVolUp: () => player.adjustVolume(5),
+    globalVolDown: () => player.adjustVolume(-5),
+  };
+  for (const [id, action] of Object.entries(globalActions)) {
+    const key = settings.shortcuts[id]?.key;
+    if (!key) continue;
+    try { await unregister(key); } catch {}
+    try {
+      await register(key, (event) => {
+        if (event.state === 'Pressed') action();
+      });
+    } catch {}
+  }
+}
+
+watch(() => settings.shortcuts, () => {
+  registerGlobalShortcuts();
+}, { deep: true });
+
+onMounted(() => {
+  registerGlobalShortcuts();
+});
+
+function parseShortcutKey(combo: string): { ctrl: boolean; alt: boolean; shift: boolean; code: string } {
+  const parts = combo.split('+');
+  return {
+    ctrl: parts.includes('Control'),
+    alt: parts.includes('Alt'),
+    shift: parts.includes('Shift'),
+    code: parts.find(p => !['Control', 'Alt', 'Shift'].includes(p)) || '',
+  };
+}
 
 onMounted(() => {
   function onKeydown(e: KeyboardEvent) {
@@ -432,13 +499,25 @@ onMounted(() => {
       e.preventDefault();
       player.toggle();
     }
-    if ((e.ctrlKey || e.metaKey) && e.code === 'ArrowRight') {
-      e.preventDefault();
-      player.next();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.code === 'ArrowLeft') {
-      e.preventDefault();
-      player.prev();
+
+    const localActions: Record<string, () => void> = {
+      prev: () => player.prev(),
+      next: () => player.next(),
+      volUp: () => player.adjustVolume(5),
+      volDown: () => player.adjustVolume(-5),
+    };
+    for (const [id, action] of Object.entries(localActions)) {
+      const key = settings.shortcuts[id]?.key;
+      if (!key) continue;
+      const parsed = parseShortcutKey(key);
+      const ctrlMatch = parsed.ctrl ? (e.ctrlKey || e.metaKey) : !e.ctrlKey && !e.metaKey;
+      const altMatch = parsed.alt ? e.altKey : !e.altKey;
+      const shiftMatch = parsed.shift ? e.shiftKey : !e.shiftKey;
+      if (ctrlMatch && altMatch && shiftMatch && e.code === parsed.code) {
+        e.preventDefault();
+        action();
+        return;
+      }
     }
   }
   window.addEventListener('keydown', onKeydown);
@@ -460,10 +539,8 @@ onMounted(() => {
 .custom-scroll::-webkit-scrollbar { width: 0; display: none; }
 .roam-lyric-line:hover {
   background: var(--c-subtle);
-  color: var(--c-content) !important;
 }
 .roam-lyric-active:hover {
   background: var(--c-subtle) !important;
-  color: var(--c-content) !important;
 }
 </style>
