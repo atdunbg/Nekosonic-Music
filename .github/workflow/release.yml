@@ -25,9 +25,7 @@ jobs:
           node-version: '20'
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable  
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
@@ -39,19 +37,34 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      - name: Extract release notes for version
+        id: release_notes
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"   
+          # 从 CHANGELOG.md 中提取 "## v0.3.0" 到下一个 "## " 之间的内容
+          NOTES=$(awk -v ver="## $VERSION" '$0 ~ ver {flag=1; next} /^## / && flag {exit} flag' CHANGELOG.md)
+
+          # 如果没有提取到内容，使用默认文本
+          if [ -z "$NOTES" ]; then
+            NOTES="See CHANGELOG.md for details."
+          fi
+
+          # 将多行内容写入环境变量(GitHub Actions 支持多行输入)
+          {
+            echo 'NOTES<<EOF'
+            echo "$NOTES"
+            echo EOF
+          } >> $GITHUB_ENV
+
       - name: Build and publish with Tauri Action
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 私钥：需要先保存在 GitHub Secrets 中，名字叫 TAURI_PRIVATE_KEY
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         with:
-          # 标签名（自动取触发标签）
           tagName: ${{ github.ref_name }}
-          # 发布标题
           releaseName: 'v__VERSION__'
-          # 发布说明文件（可选）
-          releaseBody: 'See CHANGELOG.md for details.'
-          # 如果该平台不生成某些包，不会报错
+          releaseBody: ${{ env.NOTES }}  
           releaseDraft: false
           prerelease: false
