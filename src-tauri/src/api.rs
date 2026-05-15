@@ -728,3 +728,186 @@ fn sanitize_filename(name: &str) -> String {
         .trim()
         .to_string()
 }
+
+#[tauri::command]
+pub async fn artist_detail(id: u64, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let q = state.build_query().param("id", &id.to_string());
+    client.artist_detail(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn artist_songs(query: ArtistSongsQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let mut q = state.build_query().param("id", &query.id.to_string());
+    if let Some(ref order) = query.order {
+        q = q.param("order", order);
+    }
+    if let Some(limit) = query.limit {
+        q = q.param("limit", &limit.to_string());
+    }
+    if let Some(offset) = query.offset {
+        q = q.param("offset", &offset.to_string());
+    }
+    client.artist_songs(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistSongsQuery {
+    pub id: u64,
+    pub order: Option<String>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+#[tauri::command]
+pub async fn artist_album(id: u64, limit: Option<u32>, offset: Option<u32>, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let mut q = state.build_query().param("id", &id.to_string());
+    if let Some(limit) = limit {
+        q = q.param("limit", &limit.to_string());
+    }
+    if let Some(offset) = offset {
+        q = q.param("offset", &offset.to_string());
+    }
+    client.artist_album(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn artist_desc(id: u64, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let q = state.build_query().param("id", &id.to_string());
+    client.artist_desc(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn album_detail(id: u64, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let q = state.build_query().param("id", &id.to_string());
+    client.album(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn comment_new(query: CommentNewQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let mut q = state.build_query()
+        .param("type", &query.r#type.to_string())
+        .param("id", &query.id.to_string());
+    if let Some(sort_type) = query.sort_type {
+        q = q.param("sortType", &sort_type.to_string());
+    }
+    if let Some(page_no) = query.page_no {
+        q = q.param("pageNo", &page_no.to_string());
+    }
+    if let Some(page_size) = query.page_size {
+        q = q.param("pageSize", &page_size.to_string());
+    }
+    if let Some(cursor) = query.cursor {
+        q = q.param("cursor", &cursor.to_string());
+    }
+    client.comment_new(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+pub struct CommentNewQuery {
+    pub r#type: u8,
+    pub id: u64,
+    #[serde(rename = "sortType")]
+    pub sort_type: Option<u8>,
+    #[serde(rename = "pageNo")]
+    pub page_no: Option<u32>,
+    #[serde(rename = "pageSize")]
+    pub page_size: Option<u32>,
+    pub cursor: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn comment_hot(query: CommentHotQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let mut q = state.build_query()
+        .param("type", &query.r#type.to_string())
+        .param("id", &query.id.to_string());
+    if let Some(limit) = query.limit {
+        q = q.param("limit", &limit.to_string());
+    }
+    if let Some(offset) = query.offset {
+        q = q.param("offset", &offset.to_string());
+    }
+    if let Some(before) = query.before {
+        q = q.param("before", &before.to_string());
+    }
+    client.comment_hot(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+pub struct CommentHotQuery {
+    pub r#type: u8,
+    pub id: u64,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub before: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn comment_floor(query: CommentFloorQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let mut q = state.build_query()
+        .param("parentCommentId", &query.parent_comment_id.to_string())
+        .param("type", &query.r#type.to_string())
+        .param("id", &query.id.to_string());
+    if let Some(limit) = query.limit {
+        q = q.param("limit", &limit.to_string());
+    }
+    if let Some(time) = query.time {
+        q = q.param("time", &time.to_string());
+    }
+    client.comment_floor(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+pub struct CommentFloorQuery {
+    #[serde(rename = "parentCommentId")]
+    pub parent_comment_id: u64,
+    pub r#type: u8,
+    pub id: u64,
+    pub limit: Option<u32>,
+    pub time: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn comment_like(query: CommentLikeQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let client = state.client.lock().await;
+    let q = state.build_query()
+        .param("t", &query.t.to_string())
+        .param("type", &query.r#type.to_string())
+        .param("id", &query.id.to_string())
+        .param("cid", &query.cid.to_string());
+    client.comment_like(&q).await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+pub struct CommentLikeQuery {
+    pub t: u8,
+    pub r#type: u8,
+    pub id: u64,
+    pub cid: u64,
+}

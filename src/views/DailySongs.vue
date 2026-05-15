@@ -39,7 +39,14 @@
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium truncate" :class="isCurrentSong(song.id) ? 'text-accent-text' : ''">{{ song.name }}</p>
           <p class="text-xs text-content-2 truncate">
-            {{ song.ar?.map((a: any) => a.name).join(' / ') }}
+            <template v-for="(a, i) in song.ar || []" :key="a.id || i">
+              <span v-if="i > 0" class="text-content-3">/</span>
+              <span class="hover:text-accent-text cursor-pointer transition" @click.stop="a.id && router.push({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
+            </template>
+            <template v-if="song.al?.name">
+              <span class="text-content-3 mx-1">·</span>
+              <span class="hover:text-accent-text cursor-pointer transition" @click.stop="song.al.id && router.push({ name: 'album', params: { id: song.al.id } })">{{ song.al.name }}</span>
+            </template>
           </p>
         </div>
         <button @click.stop="player.toggleLike(song.id)" class="text-content-3 hover:text-danger transition flex-shrink-0">
@@ -51,6 +58,7 @@
           <svg v-else-if="download.isDownloaded(song.id)" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-accent-text"><polyline points="20 6 9 17 4 12"/></svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
+        <SongItemMenu :song-id="song.id" />
         <span class="text-xs text-content-3">{{ formatDuration(song.dt) }}</span>
       </div>
     </div>
@@ -59,13 +67,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
+import SongItemMenu from '../components/SongItemMenu.vue';
 import { usePlayerStore } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
 import { formatDuration } from '../utils/format';
 
 const player = usePlayerStore();
 const download = useDownload();
+const router = useRouter();
 const songs = ref<any[]>([]);
 const loading = ref(true);
 

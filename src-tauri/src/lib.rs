@@ -1,6 +1,6 @@
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     Manager, Emitter,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,7 +17,6 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
 
-            // 注入控制器
             let app_data_dir = app.path().app_data_dir().expect("无法获取应用数据目录");
             let api_controller = ApiController::new(app_data_dir);
             app.manage(api_controller);
@@ -26,37 +25,38 @@ pub fn run() {
             let app_audio = AppAudio(std::sync::Mutex::new(audio_controller));
             app.manage(app_audio);
 
-            // 托盘菜单
             let show = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
+            let _sep1 = PredefinedMenuItem::separator(app)?;
+            let prev = MenuItemBuilder::with_id("prev", "上一首").build(app)?;
             let play_pause = MenuItemBuilder::with_id("play_pause", "播放/暂停").build(app)?;
             let next = MenuItemBuilder::with_id("next", "下一首").build(app)?;
-            let prev = MenuItemBuilder::with_id("prev", "上一首").build(app)?;
+            let _sep2 = PredefinedMenuItem::separator(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
             let menu = MenuBuilder::new(app)
                 .item(&show)
                 .separator()
-                .item(&play_pause)
-                .item(&next)
-                .item(&prev)
+                .items(&[&prev, &play_pause, &next])
                 .separator()
                 .item(&quit)
                 .build()?;
 
-            // 托盘图标（使用应用默认图标）
             let icon = app.default_window_icon().cloned().unwrap();
 
             let _tray = TrayIconBuilder::with_id("main-tray")
-                .tooltip("Nekosonic")
+                .tooltip("Nekosonic Music")
                 .icon(icon)
+                .show_menu_on_left_click(false)
                 .menu(&menu)
                 .on_menu_event(|app, event| {
-                    let window = app.get_webview_window("main").unwrap();
                     match event.id().as_ref() {
                         "show" => {
-                            window.show().unwrap();
-                            window.set_focus().unwrap();
-                            let _ = app.emit("window-shown", ());
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                                let _ = app.emit("window-shown", ());
+                            }
                         }
                         "play_pause" => {
                             let _ = app.emit("tray-play-pause", ());
@@ -84,15 +84,16 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        let window = app.get_webview_window("main").unwrap();
-                        window.show().unwrap();
-                        window.set_focus().unwrap();
-                        let _ = app.emit("window-shown", ());
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                            let _ = app.emit("window-shown", ());
+                        }
                     }
                 })
                 .build(app)?;
 
-            // 点击关闭按钮时隐藏到托盘
             let window = app.get_webview_window("main").unwrap();
             let window_clone = window.clone();
             let app_handle = app.handle().clone();
@@ -149,7 +150,17 @@ pub fn run() {
             api::list_local_songs,
             api::delete_local_song,
             api::check_local_song,
-            api::get_default_download_path
+            api::get_default_download_path,
+
+            api::artist_detail,
+            api::artist_songs,
+            api::artist_album,
+            api::artist_desc,
+            api::album_detail,
+            api::comment_new,
+            api::comment_hot,
+            api::comment_floor,
+            api::comment_like,
         ])
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())

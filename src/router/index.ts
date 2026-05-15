@@ -21,6 +21,8 @@ const routes = [
   { path: '/local-music', name: 'local-music', component: LocalMusic },
   { path: '/login', name: 'login', component: Login },
   { path: '/playlist/:id', name: 'playlist', component: PlaylistDetail },
+  { path: '/artist/:id', name: 'artist', component: () => import('@/views/ArtistDetail.vue') },
+  { path: '/album/:id', name: 'album', component: () => import('@/views/AlbumDetail.vue') },
   { path: '/settings', name: 'settings', component: Settings },
 ];
 

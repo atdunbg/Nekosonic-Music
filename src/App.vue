@@ -161,10 +161,31 @@
               <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-white/30"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
             </div>
             <h1 class="text-2xl font-bold text-white text-center">{{ roamSong?.name }}</h1>
-            <p class="text-content-2 mt-2 text-center">{{ roamArtists }}</p>
+            <p class="text-content-2 mt-2 text-center">
+              <template v-for="(a, i) in roamSong?.ar || []" :key="a.id || i">
+                <span v-if="i > 0" class="text-content-3">/</span>
+                <span class="hover:text-accent-text cursor-pointer transition" @click="a.id && navigateFromDrawer({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
+              </template>
+              <template v-if="roamSong?.al?.name">
+                <span class="text-content-3 mx-1">·</span>
+                <span class="hover:text-accent-text cursor-pointer transition" @click="roamSong!.al.id && navigateFromDrawer({ name: 'album', params: { id: roamSong!.al.id } })">{{ roamSong.al.name }}</span>
+              </template>
+            </p>
           </div>
           <div class="w-3/5 relative min-h-0 overflow-hidden flex flex-col">
-            <div ref="lyricScrollContainer" class="h-full overflow-y-auto custom-scroll px-4">
+            <div class="flex items-center gap-1 mb-3 px-4">
+              <button @click="roamTab = 'lyric'"
+                class="px-3 py-1 rounded-full text-sm transition"
+                :class="roamTab === 'lyric' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80'">
+                歌词
+              </button>
+              <button @click="roamTab = 'comment'"
+                class="px-3 py-1 rounded-full text-sm transition"
+                :class="roamTab === 'comment' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80'">
+                评论
+              </button>
+            </div>
+            <div v-show="roamTab === 'lyric'" ref="lyricScrollContainer" class="flex-1 min-h-0 overflow-y-auto custom-scroll px-4">
               <div v-if="lyrics.length > 0" class="w-full max-w-lg mx-auto text-center"
                 :style="{ paddingTop: roamLyricPadPx + 'px', paddingBottom: roamLyricPadPx + 'px' }">
                 <p
@@ -180,6 +201,9 @@
                 </p>
               </div>
               <div v-else class="text-content-3 text-center mt-8">暂无歌词</div>
+            </div>
+            <div v-show="roamTab === 'comment'" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+              <CommentSection v-if="roamSong" :type="0" :id="player.commentSongId || roamSong.id" :key="player.commentSongId || roamSong.id" />
             </div>
           </div>
         </div>
@@ -238,6 +262,7 @@ import { useUserStore } from './stores/user';
 import { useSettingsStore, type CloseAction } from './stores/settings';
 import PlayerBar from './components/PlayerBar.vue';
 import ToastContainer from './components/ToastContainer.vue';
+import CommentSection from './components/CommentSection.vue';
 import { usePlayerStore } from './stores/player';
 import { useLyric } from './composables/UserLyric';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -274,6 +299,7 @@ const roamLyricHovering = ref(false);
 const roamLyricPadPx = ref(0);
 const roamSong = computed(() => player.currentSong);
 const roamCoverError = ref(false);
+const roamTab = ref<'lyric' | 'comment'>('lyric');
 const roamCoverUrl = computed(() => {
   if (!roamSong.value) return '';
   return roamSong.value.al?.picUrl || roamSong.value.album?.picUrl || '';
@@ -289,6 +315,7 @@ function updateRoamLyricPad() {
 
 watch(() => player.showRoamDrawer, (val) => {
   if (val) {
+    roamTab.value = player.roamInitialTab;
     nextTick(() => {
       updateRoamLyricPad();
       if (roamResizeObserver) roamResizeObserver.disconnect();
@@ -311,10 +338,6 @@ onBeforeUnmount(() => {
     roamResizeObserver.disconnect();
     roamResizeObserver = null;
   }
-});
-const roamArtists = computed(() => {
-  if (!roamSong.value) return '';
-  return roamSong.value.ar?.map((a: any) => a.name).join(' / ') || '';
 });
 
 watch(currentLyricIdx, () => {
@@ -345,6 +368,11 @@ function seekToRoamLyric(time: number) {
   if (time != null && player.duration > 0) {
     player.seek(time);
   }
+}
+
+function navigateFromDrawer(routeLocation: { name: string; params: any }) {
+  player.closeRoamDrawer();
+  router.push(routeLocation);
 }
 
 async function openRoamFromSidebar() {

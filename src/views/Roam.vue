@@ -26,7 +26,14 @@
 
       <h1 class="text-3xl font-bold mb-2">{{ currentSong.name }}</h1>
       <p class="text-lg text-content-2 mb-8">
-        {{ artists }}
+        <template v-for="(a, i) in currentSong.ar || []" :key="a.id || i">
+          <span v-if="i > 0" class="text-content-3">/</span>
+          <span class="hover:text-accent-text cursor-pointer transition" @click="a.id && router.push({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
+        </template>
+        <template v-if="currentSong.al?.name">
+          <span class="text-content-3 mx-1">·</span>
+          <span class="hover:text-accent-text cursor-pointer transition" @click="currentSong.al.id && router.push({ name: 'album', params: { id: currentSong.al.id } })">{{ currentSong.al.name }}</span>
+        </template>
       </p>
 
       <div class="flex items-center gap-8">
@@ -58,8 +65,10 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { usePlayerStore } from '../stores/player';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeSong } from '../utils/song';
+import { useRouter } from 'vue-router';
 
 const player = usePlayerStore();
+const router = useRouter();
 const coverError = ref(false);
 
 const currentSong = computed(() => {
@@ -75,12 +84,6 @@ const coverUrl = computed(() => {
 });
 
 watch(coverUrl, () => { coverError.value = false; });
-
-const artists = computed(() => {
-  if (!currentSong.value) return '';
-  return currentSong.value.ar?.map((a: any) => a.name).join(' / ') ||
-         currentSong.value.artists?.map((a: any) => a.name).join(' / ') || '';
-});
 
 onMounted(async () => {
   if (!player.isFmMode || !player.currentSong) {

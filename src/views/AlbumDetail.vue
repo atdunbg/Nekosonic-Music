@@ -4,18 +4,22 @@
       ← 返回
     </button>
 
-    <div v-if="playlist" class="flex gap-6 mb-8">
-      <img :src="playlist.coverImgUrl" class="w-44 h-44 rounded-xl object-cover shadow-lg flex-shrink-0" />
+    <div v-if="album" class="flex gap-6 mb-8">
+      <img :src="album.picUrl" class="w-44 h-44 rounded-xl object-cover shadow-lg flex-shrink-0" />
       <div class="flex flex-col justify-between min-w-0">
         <div>
-          <h1 class="text-2xl font-bold leading-tight">{{ playlist.name }}</h1>
-          <div v-if="playlist.creator" class="flex items-center gap-2 mt-2">
-            <img :src="playlist.creator.avatarUrl" class="w-5 h-5 rounded-full" />
-            <span class="text-sm text-content-2">{{ playlist.creator.nickname }}</span>
+          <h1 class="text-2xl font-bold leading-tight">{{ album.name }}</h1>
+          <div v-if="album.artists?.length" class="flex items-center gap-1 mt-2 text-sm text-content-2">
+            <template v-for="(ar, idx) in album.artists" :key="ar.id">
+              <span v-if="idx > 0" class="text-content-3">/</span>
+              <span
+                class="hover:text-accent-text cursor-pointer transition"
+                @click="ar.id && router.push({ name: 'artist', params: { id: ar.id } })"
+              >{{ ar.name }}</span>
+            </template>
           </div>
-          <p class="text-sm text-content-2 mt-2 line-clamp-2">{{ playlist.description }}</p>
           <p class="text-xs text-content-3 mt-2">
-            {{ playlist.trackCount }} 首歌曲 · 播放 {{ formatPlayCount(playlist.playCount) }} 次
+            {{ formatDate(album.publishTime) }} · {{ songs.length }} 首歌曲
           </p>
         </div>
         <div class="flex items-center gap-3 mt-4">
@@ -25,18 +29,6 @@
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
             播放全部
-          </button>
-          <button
-            v-if="!isOwnPlaylist"
-            @click="toggleSubscribe"
-            class="px-4 py-2 bg-muted hover:bg-emphasis rounded-full text-sm transition flex items-center gap-2"
-            :class="subscribed ? 'text-accent-text' : 'text-content/70'"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path v-if="subscribed" d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-              <path v-else d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-            </svg>
-            {{ subscribed ? '已收藏' : '收藏歌单' }}
           </button>
         </div>
       </div>
@@ -92,65 +84,60 @@
         <span class="text-xs text-content-3">{{ formatDuration(song.dt) }}</span>
       </div>
     </div>
-
-    <div v-if="playlist" class="mt-8">
-      <CommentSection :type="2" :id="Number(route.params.id)" />
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayerStore } from '../stores/player';
-import { useUserStore } from '../stores/user';
 import { useDownload } from '../composables/useDownload';
-import { showToast } from '../composables/useToast';
-import { formatDuration, formatPlayCount } from '../utils/format';
+import { formatDuration } from '../utils/format';
 import SongItemMenu from '../components/SongItemMenu.vue';
-import CommentSection from '../components/CommentSection.vue';
 
 const route = useRoute();
 const router = useRouter();
 const player = usePlayerStore();
-const userStore = useUserStore();
 const download = useDownload();
 
-const playlist = ref<any>(null);
+const album = ref<any>(null);
 const songs = ref<any[]>([]);
 const loading = ref(true);
-const subscribed = ref(false);
 
-const isOwnPlaylist = computed(() => {
-  if (!playlist.value || !userStore.user) return false;
-  return playlist.value.creator?.userId === userStore.user.userId;
-});
+function formatDate(ts: number): string {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
-async function fetchPlaylist(id: number) {
+async function fetchAlbum(id: number) {
   loading.value = true;
-  playlist.value = null;
+  album.value = null;
   songs.value = [];
   try {
-    const jsonStr: string = await invoke('get_playlist_detail', { id });
+    const jsonStr: string = await invoke('album_detail', { id });
     const data = JSON.parse(jsonStr);
-    playlist.value = data.playlist;
-    songs.value = data.playlist.tracks || [];
-    subscribed.value = data.playlist.subscribed || false;
+    const a = data.album;
+    if (a) {
+      delete a.uid;
+      if (a.artists) a.artists.forEach((ar: any) => delete ar.uid);
+    }
+    album.value = a;
+    songs.value = data.songs || [];
   } catch (e) {
     console.error(e);
-    showToast('获取歌单详情失败', 'error');
   } finally {
     loading.value = false;
   }
 }
 
 onMounted(() => {
-  fetchPlaylist(Number(route.params.id));
+  fetchAlbum(Number(route.params.id));
 });
 
 watch(() => route.params.id, (newId) => {
-  if (newId) fetchPlaylist(Number(newId));
+  if (newId) fetchAlbum(Number(newId));
 });
 
 function isCurrentSong(songId: number): boolean {
@@ -165,17 +152,5 @@ async function playSingle(song: any) {
 function playAll() {
   if (songs.value.length === 0) return;
   player.playAll(songs.value);
-}
-
-async function toggleSubscribe() {
-  if (!playlist.value) return;
-  const newSubscribed = !subscribed.value;
-  try {
-    await invoke('playlist_subscribe', { query: { id: Number(playlist.value.id), subscribe: newSubscribed } });
-    subscribed.value = newSubscribed;
-    showToast(subscribed.value ? '已收藏歌单' : '已取消收藏', 'success');
-  } catch {
-    showToast('操作失败，请稍后重试', 'error');
-  }
 }
 </script>

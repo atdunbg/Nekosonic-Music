@@ -40,5 +40,13 @@
         "type": "downloadBootstrapper"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/atdunbg/Nekosonic-Music/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1MDdCMTJCRTE3MUI4N0QKUldSOXVISGhLN0VITmM3ZkJlbjF3UGJrK3h6ellWZ2xSUG03b3d1RWlDeldSWk1nc0pic2J2MVkK"
+    }
   }
 }

@@ -11,8 +11,8 @@ export type PlayMode = 'loop' | 'shuffle' | 'repeat-one';
 export interface Song {
   id: number;
   name: string;
-  ar: { name: string }[];
-  al: { picUrl: string; name?: string };
+  ar: { id?: number; name: string }[];
+  al: { id?: number; picUrl: string; name?: string };
   dt?: number;
 
   album?: { picUrl?: string; name?: string };
@@ -292,11 +292,11 @@ export const usePlayerStore = defineStore('player', () => {
     if (tickInterval) clearInterval(tickInterval);
     tickInterval = setInterval(() => {
       if (playing.value && duration.value > 0) {
-        currentTime.value += 0.25;
-        if (currentTime.value >= duration.value) {
-          currentTime.value = duration.value;
-          if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
-          next();
+        if (currentTime.value < duration.value) {
+          currentTime.value += 0.25;
+          if (currentTime.value > duration.value) {
+            currentTime.value = duration.value;
+          }
         }
       }
     }, 250);
@@ -416,9 +416,17 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   const showRoamDrawer = ref(false);
+  const roamInitialTab = ref<'lyric' | 'comment'>('lyric');
+  const commentSongId = ref<number | null>(null);
 
-  function openRoamDrawer() {
+  function openRoamDrawer(tab: 'lyric' | 'comment' = 'lyric') {
+    roamInitialTab.value = tab;
     showRoamDrawer.value = true;
+  }
+
+  function openCommentForSong(songId: number) {
+    commentSongId.value = songId;
+    openRoamDrawer('comment');
   }
 
   function closeRoamDrawer() {
@@ -493,9 +501,7 @@ listen('audio-ended', () => {
   if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
   if (isFmMode.value && fmNextCallback) {
     fmNextCallback();
-    return;
-  }
-  if (playing.value && !isFmMode.value) {
+  } else {
     next();
   }
 });
@@ -552,6 +558,9 @@ watch(playing, (val) => {
     toggleLike,
 
     showRoamDrawer,
+    roamInitialTab,
+    commentSongId,
+    openCommentForSong,
     openRoamDrawer,
     closeRoamDrawer,
     toggleRoamDrawer,

@@ -23,12 +23,22 @@
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium truncate">{{ player.currentSong?.name }}</p>
           <p class="text-xs text-content-2 truncate">
-            {{player.currentSong?.ar?.map((a: any) => a.name).join('/')}}
+            <template v-for="(a, i) in player.currentSong?.ar || []" :key="a.id || i">
+              <span v-if="i > 0" class="text-content-3">/</span>
+              <span class="hover:text-accent-text cursor-pointer transition" @click.stop="a.id && router.push({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
+            </template>
+            <template v-if="player.currentSong?.al?.name">
+              <span class="text-content-3 mx-1">·</span>
+              <span class="hover:text-accent-text cursor-pointer transition" @click.stop="player.currentSong!.al.id && router.push({ name: 'album', params: { id: player.currentSong!.al.id } })">{{ player.currentSong.al.name }}</span>
+            </template>
           </p>
         </div>
         <button @click="player.currentSong && player.toggleLike(player.currentSong.id)" class="flex-shrink-0 transition" :class="player.currentSong && player.isLiked(player.currentSong.id) ? 'text-danger' : 'text-content-3 hover:text-danger'">
           <svg v-if="player.currentSong && player.isLiked(player.currentSong.id)" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+        </button>
+        <button v-if="player.currentSong" @click="player.openRoamDrawer('comment')" class="flex-shrink-0 text-content-3 hover:text-accent-text transition" title="评论">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
         </button>
         <button v-if="player.currentSong && !download.isDownloaded(player.currentSong!.id) && !download.isDownloading(player.currentSong!.id)" @click="download.downloadSong(player.currentSong)" class="flex-shrink-0 text-content-3 hover:text-accent-text transition" title="下载">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -110,7 +120,10 @@
             <div class="flex-1 min-w-0">
               <p class="text-xs font-medium truncate">{{ song.name }}</p>
               <p class="text-xs text-content-3 truncate">
-                {{song.ar?.map((a: any) => a.name).join('/')}}
+                <template v-for="(a, i) in song.ar || []" :key="a.id || i">
+                  <span v-if="i > 0" class="text-content-3">/</span>
+                  <span class="hover:text-accent-text cursor-pointer transition" @click.stop="a.id && router.push({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
+                </template>
               </p>
             </div>
             <button @click.stop="player.removeFromQueue(idx)"
@@ -131,7 +144,9 @@ import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const player = usePlayerStore();
 const download = useDownload();
 const showQueuePanel = ref(false);

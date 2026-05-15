@@ -9,6 +9,9 @@ export function normalizeSong(song: any) {
   if (!normalized.al?.name && normalized.album?.name) {
     normalized.al = { ...normalized.al, name: normalized.album.name };
   }
+  if (!normalized.al?.id && normalized.album?.id) {
+    normalized.al = { ...normalized.al, id: normalized.album.id };
+  }
   if (!normalized.ar || normalized.ar.length === 0) {
     normalized.ar = normalized.artists || [];
   }
