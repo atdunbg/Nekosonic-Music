@@ -213,6 +213,15 @@
     <PlayerBar v-if="player.currentSong" />
     <ToastContainer />
 
+    <UpdateDialog
+      :visible="updater.updateAvailable.value && !!updater.updateInfo.value"
+      :info="{ version: updater.updateInfo.value?.version || '', date: updater.updateInfo.value?.date ?? null, body: updater.updateInfo.value?.body ?? null, currentVersion: updater.currentVersion.value }"
+      :downloading="updater.downloading.value"
+      :download-progress="updater.downloadProgress.value"
+      @update="updater.downloadAndInstall()"
+      @ignore="updater.ignoreVersion(updater.updateInfo.value?.version || '')"
+    />
+
     <Transition name="fade">
       <div v-if="showCloseModal" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="showCloseModal = false">
         <div class="bg-surface border border-line rounded-2xl shadow-2xl w-80 p-6 select-auto">
@@ -263,8 +272,10 @@ import { useSettingsStore, type CloseAction } from './stores/settings';
 import PlayerBar from './components/PlayerBar.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import CommentSection from './components/CommentSection.vue';
+import UpdateDialog from './components/UpdateDialog.vue';
 import { usePlayerStore } from './stores/player';
 import { useLyric } from './composables/UserLyric';
+import { useUpdater } from './composables/useUpdater';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
@@ -274,6 +285,7 @@ const route = useRoute();
 const userStore = useUserStore();
 const player = usePlayerStore();
 const settings = useSettingsStore();
+const updater = useUpdater();
 
 const createdPlaylists = ref<any[]>([]);
 const subPlaylists = ref<any[]>([]);
@@ -426,6 +438,8 @@ onMounted(async () => {
       });
     }
   } catch {}
+
+  updater.checkForUpdate(true);
 });
 
 const currentWindow = getCurrentWindow();
