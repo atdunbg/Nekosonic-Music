@@ -41,6 +41,7 @@ interface SettingsData {
   theme: ThemeMode;
   closeAction: CloseAction;
   shortcuts: Record<string, ShortcutBinding>;
+  outputDevice: string | null;
 }
 
 function loadSettings(): SettingsData {
@@ -54,6 +55,7 @@ function loadSettings(): SettingsData {
         theme: parsed.theme || 'dark',
         closeAction: parsed.closeAction || 'ask',
         shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
+        outputDevice: parsed.outputDevice || null,
       };
     }
   } catch {}
@@ -63,6 +65,7 @@ function loadSettings(): SettingsData {
     theme: 'dark',
     closeAction: 'ask',
     shortcuts: { ...defaultShortcuts },
+    outputDevice: null,
   };
 }
 
@@ -74,6 +77,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeMode>(saved.theme);
   const closeAction = ref<CloseAction>(saved.closeAction || 'ask');
   const shortcuts = ref<Record<string, ShortcutBinding>>(saved.shortcuts);
+  const outputDevice = ref<string | null>(saved.outputDevice);
 
   function setAudioQuality(q: AudioQuality) {
     audioQuality.value = q;
@@ -99,21 +103,27 @@ export const useSettingsStore = defineStore('settings', () => {
     shortcuts.value = { ...defaultShortcuts };
   }
 
+  function setOutputDevice(device: string | null) {
+    outputDevice.value = device;
+  }
+
   function resetAll() {
     audioQuality.value = 'standard';
     downloadPath.value = '';
     theme.value = 'dark';
     closeAction.value = 'ask';
     shortcuts.value = { ...defaultShortcuts };
+    outputDevice.value = null;
   }
 
-  watch([audioQuality, downloadPath, theme, closeAction, shortcuts], () => {
+  watch([audioQuality, downloadPath, theme, closeAction, shortcuts, outputDevice], () => {
     const data: SettingsData = {
       audioQuality: audioQuality.value,
       downloadPath: downloadPath.value,
       theme: theme.value,
       closeAction: closeAction.value,
       shortcuts: shortcuts.value,
+      outputDevice: outputDevice.value,
     };
     localStorage.setItem('app_settings', JSON.stringify(data));
   }, { deep: true });
@@ -124,10 +134,12 @@ export const useSettingsStore = defineStore('settings', () => {
     theme,
     closeAction,
     shortcuts,
+    outputDevice,
     setAudioQuality,
     setDownloadPath,
     setTheme,
     setCloseAction,
+    setOutputDevice,
     setShortcut,
     resetShortcuts,
     resetAll,

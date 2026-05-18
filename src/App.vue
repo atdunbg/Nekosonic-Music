@@ -440,6 +440,14 @@ onMounted(async () => {
   } catch {}
 
   updater.checkForUpdate(true);
+
+  // 恢复保存的输出设备设置
+  if(settings.outputDevice) {
+    try {
+      await invoke('set_output_device', { device: settings.outputDevice });
+    }
+    catch{}
+  }
 });
 
 const currentWindow = getCurrentWindow();

@@ -10,6 +10,14 @@
       <div class="space-y-5">
         <div class="flex items-center justify-between">
           <div>
+            <p class="text-sm font-medium">输出设备</p>
+            <p class="text-xs text-content-3 mt-0.5">选择音频播放设备</p>
+          </div>
+          <CustomSelect v-model="selectedDevice" :options="deviceOptions" />
+        </div>
+
+        <div class="flex items-center justify-between">
+          <div>
             <p class="text-sm font-medium">音质选择</p>
             <p class="text-xs text-content-3 mt-0.5">更高音质需要 VIP 权限</p>
           </div>
@@ -246,13 +254,45 @@ const settings = useSettingsStore();
 const { showToast } = useToast();
 const updater = useUpdater();
 
+const devices = ref<string[]>([]);
+const deviceOptions = computed(() => {
+  const options: Record<string, string> = { '': '跟随系统默认' };
+  for (const name of devices.value) {
+    options[name] = name;
+  }
+  return options;
+});
+
+const selectedDevice = computed({
+  get: () => settings.outputDevice || '',
+  set: (val: string) => {
+    const device = val === '' ? null : val;
+    settings.setOutputDevice(device);
+    invoke('set_output_device', { device }).then(() => {
+      showToast(device ? `已切换到: ${device}` : '已切换到系统默认', 'success');
+    }).catch((e) => {
+      console.error('切换设备失败: ', e);
+      showToast('切换设备失败', 'error');
+    });
+  }
+});
+
+async function loadDevices() {
+  try {
+    devices.value = await invoke<string[]>('get_output_devices');
+  } catch (e) {
+    console.error('获取设备失败: ', e);
+  }
+}
+
 const appVersion = ref('');
 const defaultDownloadPath = ref('');
 onMounted(async () => {
   appVersion.value = await getVersion();
   try {
     defaultDownloadPath.value = await invoke<string>('get_default_download_path');
-  } catch {}
+  } catch { }
+  loadDevices();
 });
 
 const closeActionValue = computed({
