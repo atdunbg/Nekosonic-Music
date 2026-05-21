@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref , watch } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { normalizeSong } from '../utils/song';
 import { useSettingsStore } from './settings';
@@ -422,6 +422,7 @@ export const usePlayerStore = defineStore('player', () => {
   function openRoamDrawer(tab: 'lyric' | 'comment' = 'lyric') {
     roamInitialTab.value = tab;
     showRoamDrawer.value = true;
+    nextTick(() => { roamInitialTab.value = 'lyric'; });
   }
 
   function openCommentForSong(songId: number) {

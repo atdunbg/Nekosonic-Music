@@ -1,6 +1,6 @@
 <template>
   <Transition name="fade">
-    <div v-if="visible" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="handleIgnore">
+    <div v-if="visible" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="!downloading && handleIgnore()">
       <div class="bg-surface border border-line rounded-2xl shadow-2xl w-[440px] max-h-[80vh] flex flex-col select-auto">
         <div class="p-6 pb-4">
           <div class="flex items-center gap-3 mb-1">

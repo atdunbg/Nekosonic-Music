@@ -184,6 +184,12 @@
                 :class="roamTab === 'comment' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80'">
                 评论
               </button>
+              <button v-if="hasTranslation" @click="toggleTranslation"
+                class="ml-auto px-2.5 py-1 rounded-full text-xs transition flex items-center gap-1"
+                :class="showTranslation ? 'bg-white/15 text-white font-medium' : 'text-white/40 hover:text-white/70'">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+                译
+              </button>
             </div>
             <div v-show="roamTab === 'lyric'" ref="lyricScrollContainer" class="flex-1 min-h-0 overflow-y-auto custom-scroll px-4">
               <div v-if="lyrics.length > 0" class="w-full max-w-lg mx-auto text-center"
@@ -198,6 +204,7 @@
                   @mouseleave="roamLyricHovering = false"
                 >
                   {{ line.text }}
+                  <span v-if="showTranslation && line.translation" class="block text-sm opacity-60 mt-1">{{ line.translation }}</span>
                 </p>
               </div>
               <div v-else class="text-content-3 text-center mt-8">暂无歌词</div>
@@ -305,7 +312,7 @@ function doSearch() {
   if (q) router.push({ path: '/discover', query: { q } });
 }
 
-const { lyrics, currentLyricIdx } = useLyric();
+const { lyrics, currentLyricIdx, hasTranslation, showTranslation, toggleTranslation } = useLyric();
 const lyricScrollContainer = ref<HTMLElement | null>(null);
 const roamLyricHovering = ref(false);
 const roamLyricPadPx = ref(0);
@@ -372,8 +379,8 @@ function getRoamLyricClass(idx: number): string {
     return 'roam-lyric-active text-accent-text font-semibold text-xl';
   }
   if (diff === 1) return 'text-content/70 text-lg';
-  if (diff === 2) return 'text-content-2/50 text-base';
-  return 'text-content-3/35 text-base';
+  if (diff === 2) return 'text-content-2/50 text-[1rem]';
+  return 'text-content-3/35 text-[1rem]';
 }
 
 function seekToRoamLyric(time: number) {
@@ -506,6 +513,7 @@ onMounted(() => {
 
 async function registerGlobalShortcuts() {
   const globalActions: Record<string, () => void> = {
+    globalPlayPause: () => player.toggle(),
     globalPrev: () => player.prev(),
     globalNext: () => player.next(),
     globalVolUp: () => player.adjustVolume(5),
@@ -551,6 +559,7 @@ onMounted(() => {
     }
 
     const localActions: Record<string, () => void> = {
+      playPause: () => player.toggle(),
       prev: () => player.prev(),
       next: () => player.next(),
       volUp: () => player.adjustVolume(5),

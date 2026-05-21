@@ -2,8 +2,28 @@ import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
 
 export type AudioQuality = 'standard' | 'higher' | 'exhigh' | 'lossless' | 'hires';
-export type ThemeMode = 'dark' | 'light';
+export type ThemeName = 'green' | 'rose' | 'blue' | 'violet' | 'orange' | 'cyan' | 'pink';
 export type CloseAction = 'ask' | 'minimize' | 'exit';
+
+export const themeLabels: Record<ThemeName, string> = {
+  green: '翠绿',
+  rose: '玫红',
+  blue: '天蓝',
+  violet: '紫罗兰',
+  orange: '橙色',
+  cyan: '青色',
+  pink: '粉色',
+};
+
+export const themeColors: Record<ThemeName, string> = {
+  green: '#22c55e',
+  rose: '#f43f5e',
+  blue: '#3b82f6',
+  violet: '#8b5cf6',
+  orange: '#f97316',
+  cyan: '#06b6d4',
+  pink: '#ec4899',
+};
 
 export const qualityLabels: Record<AudioQuality, string> = {
   standard: '标准',
@@ -25,10 +45,12 @@ export interface ShortcutBinding {
 }
 
 export const defaultShortcuts: Record<string, ShortcutBinding> = {
+  playPause: { key: 'Control+KeyP', label: '播放/暂停' },
   prev: { key: 'Control+ArrowLeft', label: '上一首' },
   next: { key: 'Control+ArrowRight', label: '下一首' },
   volUp: { key: 'Control+ArrowUp', label: '音量增加' },
   volDown: { key: 'Control+ArrowDown', label: '音量减小' },
+  globalPlayPause: { key: 'Alt+Control+KeyP', label: '播放/暂停（全局）' },
   globalPrev: { key: 'Alt+Control+ArrowLeft', label: '上一首（全局）' },
   globalNext: { key: 'Alt+Control+ArrowRight', label: '下一首（全局）' },
   globalVolUp: { key: 'Alt+Control+ArrowUp', label: '音量增加（全局）' },
@@ -38,7 +60,7 @@ export const defaultShortcuts: Record<string, ShortcutBinding> = {
 interface SettingsData {
   audioQuality: AudioQuality;
   downloadPath: string;
-  theme: ThemeMode;
+  theme: ThemeName;
   closeAction: CloseAction;
   shortcuts: Record<string, ShortcutBinding>;
   outputDevice: string | null;
@@ -49,10 +71,12 @@ function loadSettings(): SettingsData {
     const raw = localStorage.getItem('app_settings');
     if (raw) {
       const parsed = JSON.parse(raw);
+      const theme = parsed.theme || parsed.accentColor || 'green';
+      const validThemes: ThemeName[] = ['green', 'rose', 'blue', 'violet', 'orange', 'cyan', 'pink'];
       return {
         audioQuality: parsed.audioQuality || 'standard',
         downloadPath: parsed.downloadPath || '',
-        theme: parsed.theme || 'dark',
+        theme: validThemes.includes(theme) ? theme : 'green',
         closeAction: parsed.closeAction || 'ask',
         shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
         outputDevice: parsed.outputDevice || null,
@@ -62,7 +86,7 @@ function loadSettings(): SettingsData {
   return {
     audioQuality: 'standard',
     downloadPath: '',
-    theme: 'dark',
+    theme: 'green',
     closeAction: 'ask',
     shortcuts: { ...defaultShortcuts },
     outputDevice: null,
@@ -74,7 +98,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const audioQuality = ref<AudioQuality>(saved.audioQuality);
   const downloadPath = ref<string>(saved.downloadPath);
-  const theme = ref<ThemeMode>(saved.theme);
+  const theme = ref<ThemeName>(saved.theme);
   const closeAction = ref<CloseAction>(saved.closeAction || 'ask');
   const shortcuts = ref<Record<string, ShortcutBinding>>(saved.shortcuts);
   const outputDevice = ref<string | null>(saved.outputDevice);
@@ -87,7 +111,7 @@ export const useSettingsStore = defineStore('settings', () => {
     downloadPath.value = p;
   }
 
-  function setTheme(t: ThemeMode) {
+  function setTheme(t: ThemeName) {
     theme.value = t;
   }
 
@@ -110,7 +134,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function resetAll() {
     audioQuality.value = 'standard';
     downloadPath.value = '';
-    theme.value = 'dark';
+    theme.value = 'green';
     closeAction.value = 'ask';
     shortcuts.value = { ...defaultShortcuts };
     outputDevice.value = null;

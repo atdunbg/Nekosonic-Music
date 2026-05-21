@@ -28,23 +28,19 @@
 
     <section class="mb-8">
       <h2 class="text-sm text-content-2 uppercase tracking-wider mb-4">外观</h2>
-      <div class="space-y-5">
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium">主题</p>
-            <p class="text-xs text-content-3 mt-0.5">切换应用主题</p>
-          </div>
-          <div class="flex bg-subtle rounded-lg p-0.5">
-            <button
-              v-for="t in themeOptions"
-              :key="t.value"
-              @click="settings.setTheme(t.value)"
-              class="px-3 py-1.5 rounded-md text-sm transition"
-              :class="settings.theme === t.value ? 'bg-muted text-content' : 'text-content-3 hover:text-content-2'"
-            >
-              {{ t.label }}
-            </button>
-          </div>
+      <div>
+        <p class="text-sm font-medium mb-3">主题色</p>
+        <div class="grid grid-cols-4 gap-3">
+          <button
+            v-for="(color, key) in themeColors"
+            :key="key"
+            @click="settings.setTheme(key)"
+            class="flex flex-col items-center gap-2 p-3 rounded-xl transition-all border-2"
+            :class="settings.theme === key ? 'border-white/30 bg-white/5 scale-[1.02]' : 'border-transparent bg-subtle hover:bg-muted'"
+          >
+            <div class="w-8 h-8 rounded-full shadow-md" :style="{ backgroundColor: color }"></div>
+            <span class="text-xs" :class="settings.theme === key ? 'text-content font-medium' : 'text-content-3'">{{ themeLabels[key] }}</span>
+          </button>
         </div>
       </div>
     </section>
@@ -241,7 +237,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { useSettingsStore, qualityLabels, closeActionLabels, defaultShortcuts, type CloseAction } from '../stores/settings';
+import { useSettingsStore, qualityLabels, closeActionLabels, defaultShortcuts, themeLabels, themeColors, type CloseAction } from '../stores/settings';
 import { useToast } from '../composables/useToast';
 import { useUpdater } from '../composables/useUpdater';
 import { invoke } from '@tauri-apps/api/core';
@@ -316,11 +312,6 @@ function clearDownloadPath() {
   settings.setDownloadPath('');
   showToast('已重置为默认路径', 'success');
 }
-
-const themeOptions = [
-  { label: '深色', value: 'dark' as const },
-  { label: '浅色', value: 'light' as const },
-];
 
 async function handleCheckUpdate() {
   const result = await updater.checkForUpdate(false);
@@ -415,6 +406,12 @@ function onRecordingKeydown(e: KeyboardEvent) {
   }
 
   if (parts.length > 0 && !ignoredKeys.includes(e.key)) {
+    const hasModifier = parts.includes('Control') || parts.includes('Alt') || parts.includes('Shift');
+    if (!hasModifier) {
+      showToast('快捷键必须包含 Ctrl、Alt 或 Shift', 'error');
+      recordingId.value = null;
+      return;
+    }
     const combo = parts.join('+');
     settings.setShortcut(recordingId.value, combo);
     recordingId.value = null;

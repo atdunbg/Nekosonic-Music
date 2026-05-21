@@ -1,6 +1,7 @@
 export interface LyricLine {
-  time: number;  // 秒
+  time: number;
   text: string;
+  translation?: string;
 }
 
 export function parseLrc(lrcStr: string): LyricLine[] {
@@ -20,9 +21,35 @@ export function parseLrc(lrcStr: string): LyricLine[] {
       }
     }
   }
-  // 按时长排序
   result.sort((a, b) => a.time - b.time);
   return result;
+}
+
+export function mergeTranslation(lyrics: LyricLine[], tLrcStr: string): LyricLine[] {
+  if (!tLrcStr) return lyrics;
+  const tLines = parseLrc(tLrcStr);
+  if (tLines.length === 0) return lyrics;
+
+  const tMap = new Map<number, string>();
+  for (const t of tLines) {
+    const key = Math.round(t.time * 100);
+    tMap.set(key, t.text);
+  }
+
+  return lyrics.map(line => {
+    const key = Math.round(line.time * 100);
+    const translation = tMap.get(key);
+    if (translation) {
+      return { ...line, translation };
+    }
+    for (let offset = -3; offset <= 3; offset++) {
+      const t = tMap.get(key + offset);
+      if (t) {
+        return { ...line, translation: t };
+      }
+    }
+    return line;
+  });
 }
 
 export function getCurrentLyricIndex(lyrics: LyricLine[], currentTime: number): number {

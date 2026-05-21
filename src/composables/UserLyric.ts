@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { parseLrc, getCurrentLyricIndex, LyricLine } from '../utils/lyric';
+import { parseLrc, mergeTranslation, getCurrentLyricIndex, LyricLine } from '../utils/lyric';
 import { usePlayerStore } from '../stores/player';
 
 export function useLyric() {
@@ -8,21 +8,33 @@ export function useLyric() {
 
   const lyrics = ref<LyricLine[]>([]);
   const currentLyricIdx = ref(-1);
+  const showTranslation = ref(true);
+  const hasTranslation = ref(false);
 
   watch(() => player.currentSong, async (song) => {
     if (!song) {
       lyrics.value = [];
       currentLyricIdx.value = -1;
+      hasTranslation.value = false;
       return;
     }
     try {
       const jsonStr: string = await invoke('get_lyric', { id: song.id });
       const data = JSON.parse(jsonStr);
       const lrc = data?.lrc?.lyric || '';
-      lyrics.value = lrc ? parseLrc(lrc) : [];
+      const tLrc = data?.tlyric?.lyric || '';
+      let parsed = lrc ? parseLrc(lrc) : [];
+      if (tLrc && parsed.length > 0) {
+        parsed = mergeTranslation(parsed, tLrc);
+        hasTranslation.value = parsed.some(l => l.translation);
+      } else {
+        hasTranslation.value = false;
+      }
+      lyrics.value = parsed;
       currentLyricIdx.value = -1;
     } catch {
       lyrics.value = [];
+      hasTranslation.value = false;
     }
   }, { immediate: true });
 
@@ -34,8 +46,15 @@ export function useLyric() {
     }
   });
 
+  function toggleTranslation() {
+    showTranslation.value = !showTranslation.value;
+  }
+
   return {
     lyrics,
     currentLyricIdx,
+    hasTranslation,
+    showTranslation,
+    toggleTranslation,
   };
 }

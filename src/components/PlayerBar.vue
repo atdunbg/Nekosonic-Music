@@ -104,41 +104,99 @@
       </div>
     </div>
 
-    <Transition name="slide-up">
-      <div v-if="showQueuePanel"
-        class="border-t border-line bg-surface/95 backdrop-blur p-4 max-h-64 overflow-y-auto">
-        <div class="flex justify-between items-center mb-3">
-          <h3 class="text-sm font-semibold">播放列表 ({{ player.queue.length }})</h3>
-          <button @click="player.clearQueue()" class="text-xs text-danger hover:text-danger transition">清空</button>
-        </div>
-        <div class="space-y-1">
-          <div v-for="(song, idx) in player.queue" :key="song.id + '-' + idx" @click="playFromQueue(idx)" :class="[
-            'flex items-center gap-3 p-2 rounded-lg cursor-pointer transition',
-            idx === player.currentIndex ? 'bg-accent-dim text-content' : 'hover:bg-subtle text-content-2',
-          ]">
-            <span class="text-xs w-6 text-center">{{ idx + 1 }}</span>
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-medium truncate">{{ song.name }}</p>
-              <p class="text-xs text-content-3 truncate">
-                <template v-for="(a, i) in song.ar || []" :key="a.id || i">
-                  <span v-if="i > 0" class="text-content-3">/</span>
-                  <span class="hover:text-accent-text cursor-pointer transition" @click.stop="a.id && router.push({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
-                </template>
-              </p>
+    <Teleport to="body">
+      <Transition name="queue-fade">
+        <div v-if="showQueuePanel" class="fixed inset-0 z-[55] bg-black/40 backdrop-blur-[2px]" @click="showQueuePanel = false"></div>
+      </Transition>
+      <Transition name="queue-slide">
+        <div v-if="showQueuePanel"
+          class="fixed right-0 top-0 bottom-0 z-[56] w-[340px] bg-base/95 backdrop-blur border-l border-line flex flex-col shadow-2xl shadow-black/40">
+
+          <div class="px-5 pt-5 pb-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-[1rem] font-semibold text-content">播放列表</h3>
+                <p class="text-xs text-content-3 mt-0.5">{{ player.queue.length }} 首歌曲</p>
+              </div>
+              <div class="flex items-center gap-1">
+                <button @click="player.clearQueue()"
+                  class="px-2.5 py-1 text-xs text-content-3 hover:text-danger hover:bg-danger-dim rounded-lg transition">
+                  清空
+                </button>
+                <button @click="showQueuePanel = false"
+                  class="w-7 h-7 flex items-center justify-center rounded-lg text-content-3 hover:text-content hover:bg-subtle transition">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
             </div>
-            <button @click.stop="player.removeFromQueue(idx)"
-              class="text-content-3 hover:text-danger transition text-sm">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </div>
+
+          <div class="h-px mx-5 bg-line"></div>
+
+          <div ref="queueListEl" class="flex-1 overflow-y-auto px-3 py-2 relative">
+            <div v-if="player.queue.length === 0" class="flex flex-col items-center justify-center h-full text-content-4 gap-3">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="opacity-40">
+                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+              <p class="text-sm">播放列表为空</p>
+              <p class="text-xs text-content-4">去发现好听的音乐吧</p>
+            </div>
+
+            <div v-for="(song, idx) in player.queue" :key="song.id + '-' + idx" :id="'queue-item-' + idx"
+              @click="playFromQueue(idx)" :class="[
+                'flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 group',
+                idx === player.currentIndex
+                  ? 'bg-muted'
+                  : 'hover:bg-subtle',
+              ]">
+              <div class="w-9 h-9 rounded-md overflow-hidden flex-shrink-0 relative">
+                <img v-if="song.al?.picUrl" :src="song.al.picUrl + '?param=80y80'" class="w-full h-full object-cover" loading="lazy" />
+                <div v-else class="w-full h-full bg-muted flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-content-4"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                </div>
+                <div v-if="idx === player.currentIndex"
+                  class="absolute inset-0 bg-black/30 flex items-center justify-center">
+                  <div class="flex items-end gap-[2px] h-3">
+                    <span class="eq-bar-sm w-[2px] bg-white rounded-full" style="animation-delay: 0s"></span>
+                    <span class="eq-bar-sm w-[2px] bg-white rounded-full" style="animation-delay: 0.12s"></span>
+                    <span class="eq-bar-sm w-[2px] bg-white rounded-full" style="animation-delay: 0.24s"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm truncate" :class="idx === player.currentIndex ? 'text-accent-text font-medium' : 'text-content-2'">
+                  {{ song.name }}
+                </p>
+                <p class="text-xs text-content-3 truncate mt-0.5">
+                  <template v-for="(a, i) in song.ar || []" :key="a.id || i">
+                    <span v-if="i > 0" class="text-content-4">/</span>
+                    <span>{{ a.name }}</span>
+                  </template>
+                </p>
+              </div>
+              <button @click.stop="player.removeFromQueue(idx)"
+                class="w-6 h-6 flex items-center justify-center rounded-md text-content-4 hover:text-danger hover:bg-danger-dim transition opacity-0 group-hover:opacity-100 flex-shrink-0">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div class="h-2"></div>
+
+            <button v-if="player.currentIndex >= 0 && player.queue.length > 0" v-show="!currentSongVisible"
+              @click="scrollToCurrent"
+              class="sticky bottom-3 float-right mr-1 w-9 h-9 flex items-center justify-center rounded-full bg-surface/90 backdrop-blur shadow-lg shadow-black/30 text-content-3 hover:text-accent-text hover:bg-accent-dim/50 transition-all duration-300"
+              title="定位到正在播放">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
             </button>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, onMounted } from 'vue';
+import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from 'vue';
 import { usePlayerStore, PlayMode } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
@@ -150,6 +208,8 @@ const router = useRouter();
 const player = usePlayerStore();
 const download = useDownload();
 const showQueuePanel = ref(false);
+const queueListEl = ref<HTMLElement | null>(null);
+const currentSongVisible = ref(true);
 const progressBar = ref<HTMLElement | null>(null);
 const isSeeking = ref(false);
 const previewTime = ref(0);
@@ -241,6 +301,50 @@ function playFromQueue(index: number) {
   player.playCurrent();
 }
 
+function scrollToCurrent() {
+  const el = document.getElementById('queue-item-' + player.currentIndex);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+let currentSongObserver: IntersectionObserver | null = null;
+
+function setupCurrentSongObserver() {
+  if (currentSongObserver) {
+    currentSongObserver.disconnect();
+    currentSongObserver = null;
+  }
+  nextTick(() => {
+    const el = document.getElementById('queue-item-' + player.currentIndex);
+    if (!el || !queueListEl.value) return;
+    currentSongObserver = new IntersectionObserver(
+      ([entry]) => { currentSongVisible.value = entry.isIntersecting; },
+      { root: queueListEl.value, threshold: 0.5 }
+    );
+    currentSongObserver.observe(el);
+  });
+}
+
+watch(() => [showQueuePanel.value, player.currentIndex, player.queue.length], () => {
+  if (showQueuePanel.value) {
+    setupCurrentSongObserver();
+  } else {
+    if (currentSongObserver) {
+      currentSongObserver.disconnect();
+      currentSongObserver = null;
+    }
+    currentSongVisible.value = true;
+  }
+});
+
+onBeforeUnmount(() => {
+  if (currentSongObserver) {
+    currentSongObserver.disconnect();
+    currentSongObserver = null;
+  }
+});
+
 async function handleVolumeChange(e: Event) {
   const target = e.target as HTMLInputElement;
   const val = parseInt(target.value, 10);
@@ -255,26 +359,6 @@ const volumeBarBg = computed(() => {
 </script>
 
 <style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-up-enter-from,
-.slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
 .vol-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -310,5 +394,32 @@ const volumeBarBg = computed(() => {
 
 .vol-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
+}
+
+.queue-fade-enter-active,
+.queue-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.queue-fade-enter-from,
+.queue-fade-leave-to {
+  opacity: 0;
+}
+
+.queue-slide-enter-active,
+.queue-slide-leave-active {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.queue-slide-enter-from,
+.queue-slide-leave-to {
+  transform: translateX(100%);
+}
+
+@keyframes eq-bounce-sm {
+  0%, 100% { height: 2px; }
+  50% { height: 10px; }
+}
+
+.eq-bar-sm {
+  animation: eq-bounce-sm 0.6s ease-in-out infinite;
 }
 </style>
