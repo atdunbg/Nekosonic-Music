@@ -64,11 +64,13 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { usePlayerStore } from '../stores/player';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizeSong } from '../utils/song';
+import { normalizeSong, getCoverUrl } from '../utils/song';
 import { useRouter } from 'vue-router';
+import { useOnlineStatus } from '../composables/useOnlineStatus';
 
 const player = usePlayerStore();
 const router = useRouter();
+const { isOnline } = useOnlineStatus();
 const coverError = ref(false);
 
 const currentSong = computed(() => {
@@ -80,7 +82,7 @@ const currentSong = computed(() => {
 
 const coverUrl = computed(() => {
   if (!currentSong.value) return '';
-  return currentSong.value.al?.picUrl || currentSong.value.album?.picUrl || '';
+  return getCoverUrl(currentSong.value) || '';
 });
 
 watch(coverUrl, () => { coverError.value = false; });
@@ -109,4 +111,10 @@ async function startFm() {
 async function nextSong() {
   await startFm();
 }
+
+watch(isOnline, (val, old) => {
+  if (val && !old && !currentSong.value) {
+    startFm();
+  }
+});
 </script>

@@ -14,6 +14,7 @@
 - 📻 私人漫游 FM（个性化推荐，VIP 试听自动跳过）
 - 🎵 本地音乐播放（支持 mp3 / flac / wav / ogg / aac / m4a / wma / opus）
 - 🔊 音频输出设备选择
+- 🎧 系统媒体控制（蓝牙耳机/键盘媒体键/系统面板，支持 Linux / Windows / macOS）
 
 ### 发现与浏览
 
@@ -27,6 +28,7 @@
 ### 歌词与评论
 
 - 🎤 实时滚动歌词（自动滚动 / 点击跳转 / 渐变透明度）
+- 🎤 歌词翻译显示
 - 🎤 全屏漫游模式（大封面 + 歌词 / 评论双标签页）
 - 💬 歌曲评论查看（热门评论 + 无限滚动加载 + 点赞）
 
@@ -47,10 +49,11 @@
 - 📡 系统托盘（播放控制 / 显示窗口 / 退出）
 - 🛡 单实例运行（防止重复启动）
 - ⌨️ 自定义快捷键（应用内 + 系统全局）
-- 🌚 Light / Dark Mode 主题切换
+- 🎨 多主题切换（天蓝 / 翠绿 / 玫红 / 紫罗兰 / 橙色 / 青色 / 粉色）
 - ⚙️ 关闭窗口行为设置（每次询问 / 最小化到托盘 / 直接退出）
 - 🔄 自动更新（启动静默检测 + 自定义弹窗 + 忽略版本 + 下载进度）
 - 📝 更新日志查看
+- 📶 网络状态检测（断网/恢复 Toast 提示 + 自动重试加载）
 
 ## 📦️ 安装
 
@@ -84,7 +87,8 @@ npm run tauri build
 | 样式 | Tailwind CSS v4 + CSS 变量主题系统 |
 | 状态管理 | Pinia |
 | 路由 | Vue Router 4 |
-| 音频播放 | rodio (Rust) |
+| 音频解码 | symphonia + ringbuf (Rust) |
+| 媒体控制 | souvlaki (Linux MPRIS / Windows SMTC / macOS Now Playing) |
 | 网易云 API | ncm-api-rs |
 | 构建工具 | Vite 6 |
 
@@ -97,10 +101,11 @@ npm run tauri build
 - [x] 专辑详情页
 - [x] 自定义全局快捷键
 - [x] 自动更新
+- [x] 歌词翻译
+- [x] 更多主题
+- [x] 系统媒体控制（蓝牙耳机/键盘媒体键）
 - [ ] MV 播放
 - [ ] 音乐云盘
-- [ ] 歌词翻译
-- [ ] 更多主题
 - [ ] 桌面歌词
 
 欢迎提 Issue 和 Pull request。
@@ -117,4 +122,5 @@ npm run tauri build
 - [Tauri](https://tauri.app/) — 跨平台桌面应用框架
 - [Vue.js](https://vuejs.org/) — 渐进式 JavaScript 框架
 - [Tailwind CSS](https://tailwindcss.com/) — 实用优先的 CSS 框架
-- [rodio](https://crates.io/crates/rodio) — Rust 音频播放库
+- [symphonia](https://crates.io/crates/symphonia) — Rust 纯音频解码库
+- [souvlaki](https://crates.io/crates/souvlaki) — 跨平台 OS 媒体控制库

@@ -14,8 +14,8 @@
 
     <div class="flex items-center px-6 h-16">
       <div class="flex items-center gap-3 w-56 min-w-0">
-        <div v-if="player.currentSong?.al?.picUrl" class="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示">
-          <img :src="player.currentSong.al.picUrl" class="w-full h-full object-cover" />
+        <div v-if="getCoverUrl(player.currentSong)" class="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示">
+          <img :src="getCoverUrl(player.currentSong)" class="w-full h-full object-cover" />
         </div>
         <div v-else class="w-10 h-10 rounded-md flex-shrink-0 bg-muted flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-content-3"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -142,43 +142,25 @@
               <p class="text-xs text-content-4">去发现好听的音乐吧</p>
             </div>
 
-            <div v-for="(song, idx) in player.queue" :key="song.id + '-' + idx" :id="'queue-item-' + idx"
-              @click="playFromQueue(idx)" :class="[
-                'flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 group',
-                idx === player.currentIndex
-                  ? 'bg-muted'
-                  : 'hover:bg-subtle',
-              ]">
-              <div class="w-9 h-9 rounded-md overflow-hidden flex-shrink-0 relative">
-                <img v-if="song.al?.picUrl" :src="song.al.picUrl + '?param=80y80'" class="w-full h-full object-cover" loading="lazy" />
-                <div v-else class="w-full h-full bg-muted flex items-center justify-center">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-content-4"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                </div>
-                <div v-if="idx === player.currentIndex"
-                  class="absolute inset-0 bg-black/30 flex items-center justify-center">
-                  <div class="flex items-end gap-[2px] h-3">
-                    <span class="eq-bar-sm w-[2px] bg-white rounded-full" style="animation-delay: 0s"></span>
-                    <span class="eq-bar-sm w-[2px] bg-white rounded-full" style="animation-delay: 0.12s"></span>
-                    <span class="eq-bar-sm w-[2px] bg-white rounded-full" style="animation-delay: 0.24s"></span>
-                  </div>
-                </div>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm truncate" :class="idx === player.currentIndex ? 'text-accent-text font-medium' : 'text-content-2'">
-                  {{ song.name }}
-                </p>
-                <p class="text-xs text-content-3 truncate mt-0.5">
-                  <template v-for="(a, i) in song.ar || []" :key="a.id || i">
-                    <span v-if="i > 0" class="text-content-4">/</span>
-                    <span>{{ a.name }}</span>
-                  </template>
-                </p>
-              </div>
-              <button @click.stop="player.removeFromQueue(idx)"
-                class="w-6 h-6 flex items-center justify-center rounded-md text-content-4 hover:text-danger hover:bg-danger-dim transition opacity-0 group-hover:opacity-100 flex-shrink-0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+            <SongListItem
+              v-for="(song, idx) in player.queue" :key="song.id + '-' + idx"
+              :id="'queue-item-' + idx"
+              :song="song"
+              :index="idx"
+              :is-current="idx === player.currentIndex"
+              show-playing-overlay
+              cover-size="w-9 h-9"
+              cover-size-param="?param=80y80"
+              :container-class="idx === player.currentIndex ? 'bg-muted hover:bg-muted gap-3 px-3 py-2 rounded-lg' : 'hover:bg-subtle gap-3 px-3 py-2 rounded-lg'"
+              @click="playFromQueue(idx)"
+            >
+              <template #actions>
+                <button @click.stop="player.removeFromQueue(idx)"
+                  class="w-6 h-6 flex items-center justify-center rounded-md text-content-4 hover:text-danger hover:bg-danger-dim transition opacity-0 group-hover:opacity-100 flex-shrink-0">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </template>
+            </SongListItem>
 
             <div class="h-2"></div>
 
@@ -200,9 +182,11 @@ import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from 'vue'
 import { usePlayerStore, PlayMode } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
+import { getCoverUrl } from '../utils/song';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useRouter } from 'vue-router';
+import SongListItem from './SongListItem.vue';
 
 const router = useRouter();
 const player = usePlayerStore();
@@ -228,7 +212,7 @@ onBeforeUnmount(() => {
   if (unlistenCache) unlistenCache();
 });
 
-const modeTexts = { loop: '列表循环', shuffle: '随机播放', 'repeat-one': '单曲循环' };
+const modeTexts: Record<PlayMode, string> = { loop: '列表循环', shuffle: '随机播放', 'repeat-one': '单曲循环' };
 const modeTitle = computed(() => modeTexts[player.playMode] || '列表循环');
 function togglePlayMode() {
   const modes: PlayMode[] = ['loop', 'shuffle', 'repeat-one'];

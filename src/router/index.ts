@@ -9,7 +9,6 @@ import DailySongs from '@/views/DailySongs.vue';
 import LocalMusic from '@/views/LocalMusic.vue';
 import Settings from '@/views/Settings.vue';
 
-
 const routes = [
   { path: '/', name: 'home', component: Home },
   { path: '/discover', name: 'discover', component: Discover },
@@ -19,14 +18,28 @@ const routes = [
   { path: '/recent', name: 'recent', component: RecentPlays },
   { path: '/daily', name: 'daily', component: DailySongs },
   { path: '/local-music', name: 'local-music', component: LocalMusic },
-  { path: '/login', name: 'login', component: Login },
+  { path: '/login', name: 'login', component: Login, meta: { guest: true } },
   { path: '/playlist/:id', name: 'playlist', component: PlaylistDetail },
   { path: '/artist/:id', name: 'artist', component: () => import('@/views/ArtistDetail.vue') },
   { path: '/album/:id', name: 'album', component: () => import('@/views/AlbumDetail.vue') },
   { path: '/settings', name: 'settings', component: Settings },
 ];
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes,
 });
+
+router.beforeEach((to) => {
+  if (to.meta.guest) {
+    const raw = localStorage.getItem('user');
+    if (raw) {
+      try {
+        const data = JSON.parse(raw);
+        if (data?.userId) return { name: 'home' };
+      } catch {}
+    }
+  }
+});
+
+export default router;

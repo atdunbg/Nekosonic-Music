@@ -1,35 +1,16 @@
 import { defineStore } from 'pinia';
 import { ref, watch, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { normalizeSong } from '../utils/song';
+import { normalizeSong, type Song } from '../utils/song';
 import { useSettingsStore } from './settings';
 import { useUserStore } from './user';
 import { showToast } from '../composables/useToast';
 
 export type PlayMode = 'loop' | 'shuffle' | 'repeat-one';
+export type { Song };
 
-export interface Song {
-  id: number;
-  name: string;
-  ar: { id?: number; name: string }[];
-  al: { id?: number; picUrl: string; name?: string };
-  dt?: number;
-
-  album?: { picUrl?: string; name?: string };
-  artists?: { name: string }[];
-  duration?: number;
-  localPath?: string;
-}
-
-const cacheProgress = ref(0);
-
-import { listen } from '@tauri-apps/api/event';
-
-export function setupCacheProgressListener() {
-  listen<number>('cache-progress', (event) => {
-    cacheProgress.value = event.payload;
-  });
-}
+import { listen, emit } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 function loadRecentLocal(): Song[] {
   try {
@@ -55,14 +36,34 @@ export const usePlayerStore = defineStore('player', () => {
 
   const queue = ref<Song[]>([]);
   const currentIndex = ref(-1);
-  const volume = ref(100);
+
+  const settings = useSettingsStore();
+  const volume = ref(settings.volume);
+
+  watch(volume, (val) => { settings.volume = val; });
 
   let tickInterval: ReturnType<typeof setInterval> | null = null;
+  function setTickInterval(v: ReturnType<typeof setInterval> | null) { _tickInterval = v; tickInterval = v; }
 
   const recentLocal = ref<Song[]>(loadRecentLocal());
   const MAX_RECENT = 200;
 
   const likedIds = ref<Set<number>>(loadLikedIdsFromStorage());
+
+  function emitPlaybackState() {
+    const song = currentSong.value;
+    const status = playing.value ? 'playing' : (song ? 'paused' : 'stopped');
+    emit('playback-state', {
+      status,
+      title: song?.name || '',
+      album: song?.al?.name || '',
+      artists: song?.ar?.map(a => a.name) || [],
+      coverUrl: song?.al?.picUrl || '',
+      durationUs: (song?.dt || 0) * 1000,
+      positionUs: Math.round(currentTime.value * 1_000_000),
+      volume: volume.value / 100,
+    });
+  }
 
   function isLiked(songId: number): boolean {
     return likedIds.value.has(songId);
@@ -125,8 +126,8 @@ export const usePlayerStore = defineStore('player', () => {
   let fmVipSkipCount = 0;
   const MAX_FM_VIP_SKIP = 10;
 
-  async function playFmSong(song: any) {
-    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+  async function playFmSong(song: Song) {
+    if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
     if (!song.dt || song.dt === 0) {
       try {
         const jsonStr: string = await invoke('get_song_detail', { id: String(song.id) });
@@ -148,7 +149,6 @@ export const usePlayerStore = defineStore('player', () => {
     fmSong.value = song;
     currentSong.value = song;
     try {
-      const settings = useSettingsStore();
       const jsonStr: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality, fm_mode: true } });
       const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
@@ -180,6 +180,7 @@ export const usePlayerStore = defineStore('player', () => {
       currentTime.value = 0;
       startTick();
       addRecent(song);
+      emitPlaybackState();
     } catch (e) {
       console.error('FM播放失败', e);
       playing.value = false;
@@ -195,6 +196,15 @@ export const usePlayerStore = defineStore('player', () => {
     disableFmMode();
 
     const idx = queue.value.findIndex(s => s.id === song.id);
+    if (idx !== -1 && idx === currentIndex.value && currentSong.value?.id === song.id) {
+      if (!playing.value) {
+        await invoke('resume_audio');
+        playing.value = true;
+        startTick();
+      }
+      return;
+    }
+
     if (idx === -1) {
       queue.value.push(song);
       currentIndex.value = queue.value.length - 1;
@@ -207,6 +217,21 @@ export const usePlayerStore = defineStore('player', () => {
   async function playFromList(songs: Song[], startIndex: number) {
     disableFmMode();
     if (songs.length === 0) return;
+
+    const targetSong = songs[startIndex];
+    if (targetSong && currentSong.value?.id === targetSong.id && currentIndex.value >= 0) {
+      const sameQueue = queue.value.length === songs.length
+        && queue.value.every((s, i) => s.id === songs[i].id);
+      if (sameQueue) {
+        if (!playing.value) {
+          await invoke('resume_audio');
+          playing.value = true;
+          startTick();
+        }
+        return;
+      }
+    }
+
     queue.value = [...songs];
     currentIndex.value = Math.max(0, Math.min(startIndex, songs.length - 1));
     await playCurrent();
@@ -215,23 +240,14 @@ export const usePlayerStore = defineStore('player', () => {
   let vipSkipCount = 0;
   const MAX_VIP_SKIP = 10;
 
-  let audioStartedResolve: (() => void) | null = null;
-
-  listen('audio-started', () => {
-    if (audioStartedResolve) {
-      audioStartedResolve();
-      audioStartedResolve = null;
-    }
-  });
-
   function waitForAudioStart(): Promise<void> {
     return new Promise<void>((resolve) => {
-      audioStartedResolve = resolve;
+      _audioStartedResolve = resolve;
     });
   }
 
   async function playCurrent() {
-    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+    if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
     const song = queue.value[currentIndex.value];
     if (!song?.id) {
       console.error('无效的歌曲数据', song);
@@ -242,18 +258,18 @@ export const usePlayerStore = defineStore('player', () => {
       currentSong.value = song;
       playing.value = false;
       currentTime.value = 0;
-      duration.value = (song.dt || song.duration || 0) / 1000;
+      duration.value = (song.dt || 0) / 1000;
 
       if (song.localPath) {
         await invoke('play_local_audio', { path: song.localPath });
         await waitForAudioStart();
         playing.value = true;
-        startTick();
-        addRecent(song);
-        return;
-      }
+      startTick();
+      addRecent(song);
+      emitPlaybackState();
+      return;
+    }
 
-      const settings = useSettingsStore();
       const jsonStr: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
       const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
@@ -282,24 +298,56 @@ export const usePlayerStore = defineStore('player', () => {
       startTick();
       addRecent(song);
       vipSkipCount = 0;
+      emitPlaybackState();
     } catch (e) {
       console.error('播放失败', e);
       playing.value = false;
     }
   }
 
+  let onSeekStart: (() => void) | null = null;
+
   function startTick() {
     if (tickInterval) clearInterval(tickInterval);
-    tickInterval = setInterval(() => {
+    let seekGuard = false;
+    onSeekStart = () => { seekGuard = true; };
+    let syncCounter = 1;
+    let lastSyncPos = -1;
+    let backendFrozen = false;
+    setTickInterval(setInterval(async () => {
       if (playing.value && duration.value > 0) {
-        if (currentTime.value < duration.value) {
-          currentTime.value += 0.25;
-          if (currentTime.value > duration.value) {
-            currentTime.value = duration.value;
+        if (seekGuard) return;
+        syncCounter++;
+        if (syncCounter >= 2) {
+          syncCounter = 0;
+          try {
+            const pos = await invoke<number>('get_audio_position');
+            if (pos >= currentTime.value - 0.5) {
+              currentTime.value = pos;
+            }
+            if (lastSyncPos < 0) {
+              lastSyncPos = pos;
+            } else if (pos <= lastSyncPos + 0.05) {
+              backendFrozen = true;
+              lastSyncPos = pos;
+            } else {
+              backendFrozen = false;
+              lastSyncPos = pos;
+            }
+          } catch {}
+        } else {
+          if (!backendFrozen) {
+            const next = currentTime.value + 0.25;
+            if (next <= duration.value) {
+              currentTime.value = next;
+            }
           }
         }
+        if (currentTime.value > duration.value) {
+          currentTime.value = duration.value;
+        }
       }
-    }, 250);
+    }, 250));
   }
 
   async function toggle() {
@@ -310,6 +358,7 @@ export const usePlayerStore = defineStore('player', () => {
       await invoke('resume_audio');
       playing.value = true;
     }
+    emitPlaybackState();
   }
 
   async function stop() {
@@ -317,8 +366,9 @@ export const usePlayerStore = defineStore('player', () => {
     playing.value = false;
     currentSong.value = null;
     currentTime.value = 0;
-    if (tickInterval) clearInterval(tickInterval);
+    if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
     disableFmMode();
+    emitPlaybackState();
   }
 
 
@@ -365,8 +415,11 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function seek(time: number) {
     try {
-      await invoke('seek_audio', { time });
       currentTime.value = time;
+      if (onSeekStart) onSeekStart();
+      await invoke('seek_audio', { time });
+      startTick();
+      emitPlaybackState();
     } catch (e) {
       console.error('seek 失败', e);
     }
@@ -376,6 +429,7 @@ export const usePlayerStore = defineStore('player', () => {
     const newVol = Math.max(0, Math.min(100, volume.value + delta));
     volume.value = newVol;
     await invoke('set_volume', { vol: newVol / 100 });
+    emitPlaybackState();
   }
 
 
@@ -457,7 +511,7 @@ export const usePlayerStore = defineStore('player', () => {
 
 
 // -------- FM 专属状态 --------
-const fmSong = ref<any>(null);
+const fmSong = ref<Song | null>(null);
 const fmPlaying = ref(false);
 
 async function loadFm() {
@@ -498,12 +552,57 @@ async function nextFm() {
   await loadFm();
 }
 
+let _audioStartedResolve: (() => void) | null = null;
+let _tickInterval: ReturnType<typeof setInterval> | null = null;
+
+listen('audio-started', () => {
+  if (_audioStartedResolve) {
+    _audioStartedResolve();
+    _audioStartedResolve = null;
+  }
+});
+
 listen('audio-ended', () => {
-  if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
-  if (isFmMode.value && fmNextCallback) {
-    fmNextCallback();
-  } else {
-    next();
+  if (_tickInterval) { clearInterval(_tickInterval); _tickInterval = null; }
+  const player = usePlayerStore();
+  player.next();
+});
+
+listen<string>('mpris-command', (event) => {
+  const cmd = event.payload;
+  const player = usePlayerStore();
+  if (cmd === 'Next') {
+    player.next();
+  } else if (cmd === 'Previous') {
+    player.prev();
+  } else if (cmd === 'PlayPause') {
+    player.toggle();
+  } else if (cmd === 'Play') {
+    if (!player.playing) player.toggle();
+  } else if (cmd === 'Pause') {
+    if (player.playing) player.toggle();
+  } else if (cmd === 'Stop') {
+    player.stop();
+  } else if (cmd.startsWith('SetVolume:')) {
+    const vol = parseFloat(cmd.slice(10));
+    if (!isNaN(vol)) {
+      player.volume = Math.round(vol * 100);
+      invoke('set_volume', { vol }).catch(() => {});
+    }
+  } else if (cmd.startsWith('Seek:')) {
+    const offsetUs = parseInt(cmd.slice(5), 10);
+    const offsetSec = offsetUs / 1_000_000;
+    const newPos = Math.max(0, Math.min(player.currentTime + offsetSec, player.duration));
+    player.seek(newPos);
+  } else if (cmd.startsWith('SetPosition:')) {
+    const posUs = parseInt(cmd.slice(13), 10);
+    const posSec = posUs / 1_000_000;
+    player.seek(posSec);
+  } else if (cmd === 'Raise') {
+    getCurrentWindow().show().catch(() => {});
+    getCurrentWindow().setFocus().catch(() => {});
+  } else if (cmd === 'Quit') {
+    getCurrentWindow().close().catch(() => {});
   }
 });
 

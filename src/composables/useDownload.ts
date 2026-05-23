@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useSettingsStore } from '../stores/settings';
 import { showToast } from '../composables/useToast';
+import { getCoverUrl, type Song } from '../utils/song';
 
 interface DownloadTask {
   id: number;
@@ -72,7 +73,7 @@ function getDownloadProgress(songId: number): number {
   return task?.progress ?? 0;
 }
 
-async function downloadSong(song: { id: number; name: string; ar?: { name: string }[]; artists?: { name: string }[]; al?: { picUrl?: string; name?: string }; album?: { picUrl?: string; name?: string }; dt?: number; duration?: number }) {
+async function downloadSong(song: Song) {
   if (downloadingIds.has(song.id)) return;
   if (localSongIds.has(song.id)) {
     showToast(`${song.name} 已下载`, 'info');
@@ -80,10 +81,10 @@ async function downloadSong(song: { id: number; name: string; ar?: { name: strin
   }
 
   const settings = useSettingsStore();
-  const artist = song.ar?.map(a => a.name).join(' / ') || song.artists?.map(a => a.name).join(' / ') || '未知';
-  const albumName = song.al?.name || song.album?.name || null;
-  const durationVal = song.dt || song.duration || null;
-  const coverUrl = song.al?.picUrl || song.album?.picUrl || null;
+  const artist = song.ar?.map(a => a.name).join(' / ') || '未知';
+  const albumName = song.al?.name || null;
+  const durationVal = song.dt || null;
+  const coverUrl = getCoverUrl(song) || null;
 
   downloadingIds.add(song.id);
   tasks.push({ id: song.id, name: song.name, progress: 0 });

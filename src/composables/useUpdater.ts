@@ -65,8 +65,7 @@ export function useUpdater() {
       }
 
       const ignored = getIgnoredVersion()
-      if (info.version === ignored) {
-        if (!silent) error.value = '当前已是最新版本'
+      if (info.version === ignored && silent) {
         return null
       }
 

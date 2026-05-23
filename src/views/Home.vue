@@ -13,7 +13,7 @@
             <p class="text-xs text-white/60 mb-1">📅 {{ todayStr }}</p>
             <h2 class="text-2xl font-bold">每日推荐</h2>
           </div>
-          <p class="text-xs text-white/60">根据你的口味生成，每天 6:00 更新</p>
+          <p class="text-xs text-white/60">根据你的口味生成，每天凌晨更新</p>
         </div>
         <div class="absolute right-4 top-1/2 -translate-y-1/2 text-6xl opacity-20">🎧</div>
       </div>
@@ -80,9 +80,9 @@
     <!-- 第二行：为你推荐（需登录） -->
     <div v-if="userStore.isLoggedIn && recPlaylists.length" class="mb-10">
       <h2 class="text-xl font-semibold mb-4">🎯 为你推荐</h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
         <div v-for="pl in recPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
-          class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer">
+          class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer max-w-[220px] justify-self-center w-full">
           <img :src="pl.picUrl" class="w-full aspect-square object-cover" />
           <div class="p-3">
             <p class="text-sm font-medium truncate">{{ pl.name }}</p>
@@ -95,9 +95,9 @@
     <!-- 第三行：热门歌单（排行榜） -->
     <div>
       <h2 class="text-xl font-semibold mb-4">📈 热门歌单</h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
         <div v-for="pl in rankPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
-          class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer backdrop-blur-sm">
+          class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer backdrop-blur-sm max-w-[220px] justify-self-center w-full">
           <img :src="pl.coverImgUrl" class="w-full aspect-square object-cover" />
           <div class="p-3">
             <p class="text-sm font-medium truncate">{{ pl.name }}</p>
@@ -109,15 +109,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
 import { useUserStore } from '../stores/user';
 import { usePlayerStore } from '../stores/player';
+import { pageCacheGet, pageCacheSet, pageCacheInvalidate } from '../composables/usePageCache';
+import { useOnlineStatus } from '../composables/useOnlineStatus';
+import { getCoverUrl } from '../utils/song';
+
+defineOptions({ name: 'HomeView' });
 
 const player = usePlayerStore();
 const router = useRouter();
 const userStore = useUserStore();
+const { isOnline } = useOnlineStatus();
 
 const rankPlaylists = ref<any[]>([]);
 const recPlaylists = ref<any[]>([]);
@@ -128,17 +134,15 @@ import { computed } from 'vue';
 
 
 const fmCoverUrl = computed(() => {
-  return player.fmSong?.al?.picUrl || player.fmSong?.album?.picUrl || '';
+  return getCoverUrl(player.fmSong) || '';
 });
 const fmDisplayName = computed(() => player.fmSong?.name || '私人漫游');
 const fmDisplayArtists = computed(() => {
   if (!player.fmSong) return '';
-  return player.fmSong.ar?.map((a: any) => a.name).join(' / ') ||
-         player.fmSong.artists?.map((a: any) => a.name).join(' / ') || '';
+  return player.fmSong.ar?.map((a: { name: string }) => a.name).join(' / ') || '';
 });
 
 
-// 首次点击播放按钮：开始 FM 并播放
 async function startFmPlay() {
   if (!player.fmSong) {
     await player.loadFm();
@@ -159,11 +163,14 @@ function onFmCardClick() {
   player.openRoamDrawer();
 }
 
-onMounted(async () => {
-  const d = new Date();
-  todayStr.value = `${d.getMonth() + 1}月${d.getDate()}日`;
+async function loadData() {
+  const cached = pageCacheGet('home');
+  if (cached) {
+    rankPlaylists.value = cached.rankPlaylists || [];
+    recPlaylists.value = cached.recPlaylists || [];
+    return;
+  }
 
-  // 排行榜
   const results = await Promise.allSettled(
     RANK_IDS.map(id => invoke('get_playlist_detail', { id }))
   );
@@ -175,13 +182,27 @@ onMounted(async () => {
     })
     .filter(Boolean);
 
-  // 推荐歌单（需登录）
   if (userStore.isLoggedIn) {
     try {
       const json = await invoke('recommend_resource');
       const data = JSON.parse(json as string);
       recPlaylists.value = data.recommend || [];
     } catch { }
+  }
+
+  pageCacheSet('home', { rankPlaylists: rankPlaylists.value, recPlaylists: recPlaylists.value });
+}
+
+onMounted(async () => {
+  const d = new Date();
+  todayStr.value = `${d.getMonth() + 1}月${d.getDate()}日`;
+  await loadData();
+});
+
+watch(isOnline, (val, old) => {
+  if (val && !old && rankPlaylists.value.length === 0 && recPlaylists.value.length === 0) {
+    pageCacheInvalidate('home');
+    loadData();
   }
 });
 

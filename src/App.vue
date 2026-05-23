@@ -124,7 +124,7 @@
 
       <main class="flex-1 overflow-y-auto pb-24">
         <router-view v-slot="{ Component }">
-          <keep-alive :max="3" include="HomeView,DiscoverView">
+          <keep-alive :max="5" :include="keepAliveInclude">
             <component :is="Component" />
           </keep-alive>
         </router-view>
@@ -281,6 +281,9 @@ import ToastContainer from './components/ToastContainer.vue';
 import CommentSection from './components/CommentSection.vue';
 import UpdateDialog from './components/UpdateDialog.vue';
 import { usePlayerStore } from './stores/player';
+import { getCoverUrl } from './utils/song';
+import { useOnlineStatus } from './composables/useOnlineStatus';
+import { showToast } from './composables/useToast';
 import { useLyric } from './composables/UserLyric';
 import { useUpdater } from './composables/useUpdater';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -293,6 +296,12 @@ const userStore = useUserStore();
 const player = usePlayerStore();
 const settings = useSettingsStore();
 const updater = useUpdater();
+const { isOnline } = useOnlineStatus();
+
+watch(isOnline, (val, old) => {
+  if (val && !old) showToast('网络已恢复', 'success');
+  else if (!val && old) showToast('网络已断开，部分功能不可用', 'error');
+});
 
 const createdPlaylists = ref<any[]>([]);
 const subPlaylists = ref<any[]>([]);
@@ -302,6 +311,7 @@ const searchQuery = ref('');
 const showCloseModal = ref(false);
 const closeDontAskAgain = ref(false);
 const windowVisible = ref(true);
+const keepAliveInclude = ref<string[]>(['HomeView', 'DiscoverView', 'FavoriteSongsView', 'DailySongsView', 'LocalMusicView']);
 
 watch(() => settings.theme, (val) => {
   document.documentElement.setAttribute('data-theme', val);
@@ -321,7 +331,7 @@ const roamCoverError = ref(false);
 const roamTab = ref<'lyric' | 'comment'>('lyric');
 const roamCoverUrl = computed(() => {
   if (!roamSong.value) return '';
-  return roamSong.value.al?.picUrl || roamSong.value.album?.picUrl || '';
+  return getCoverUrl(roamSong.value) || '';
 });
 watch(roamCoverUrl, () => { roamCoverError.value = false; });
 let roamResizeObserver: ResizeObserver | null = null;
@@ -428,6 +438,8 @@ watch(() => userStore.isLoggedIn, (val) => {
 });
 
 onMounted(async () => {
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
   if (userStore.isLoggedIn) {
     loadPlaylists();
     player.loadLikedIds();
@@ -497,9 +509,11 @@ onMounted(() => {
   });
   const unlisten4 = listen('window-hidden', () => {
     windowVisible.value = false;
+    keepAliveInclude.value = [];
   });
   const unlisten5 = listen('window-shown', () => {
     windowVisible.value = true;
+    keepAliveInclude.value = ['HomeView', 'DiscoverView', 'FavoriteSongsView', 'DailySongsView', 'LocalMusicView'];
   });
 
   onBeforeUnmount(() => {

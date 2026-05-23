@@ -1,6 +1,6 @@
 [package]
 name = "Nekosonic"
-version = "0.4.1"
+version = "0.5.0"
 description = "A Simple music app"
 authors = ["atdunbg"]
 edition = "2021"
@@ -23,7 +23,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-dialog = "2"
-rodio = "0.20"
+symphonia = { version = "0.5", features = ["mp3", "aac", "flac", "wav", "ogg", "vorbis", "isomp4", "mkv"] }
+ringbuf = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 cpal = { version = "0.15" }   
@@ -37,4 +38,14 @@ ncm-api-rs = "0.1"
 tokio = { version = "1", features = ["rt", "sync"] }   
 tauri-plugin-process = "2.3.1"
 tauri-plugin-updater = "2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+souvlaki = { version = "0.8", default-features = false, features = ["use_zbus"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+souvlaki = "0.8"
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+souvlaki = "0.8"
 

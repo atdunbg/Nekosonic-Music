@@ -105,18 +105,18 @@
           <div class="flex items-center gap-1.5">
             <button
               v-if="sc.key !== defaultShortcuts[id]?.key"
-              @click="settings.setShortcut(id, defaultShortcuts[id].key)"
+              @click="settings.setShortcut(String(id), defaultShortcuts[id].key)"
               class="w-6 h-6 flex items-center justify-center rounded-md text-content-4 hover:text-danger hover:bg-danger/10 transition"
               title="恢复默认"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
             <button
-              @click="startRecording(id)"
+              @click="startRecording(String(id))"
               class="px-3 py-1.5 rounded-lg text-sm transition min-w-[120px] text-center"
-              :class="recordingId === id ? 'bg-accent text-white' : 'bg-muted hover:bg-emphasis text-content-2'"
+              :class="recordingId === String(id) ? 'bg-accent text-white' : 'bg-muted hover:bg-emphasis text-content-2'"
             >
-              {{ recordingId === id ? '按下新快捷键...' : formatShortcut(sc.key) }}
+              {{ recordingId === String(id) ? '按下新快捷键...' : formatShortcut(sc.key) }}
             </button>
           </div>
         </div>
@@ -361,6 +361,7 @@ function formatShortcut(key: string): string {
     .replace('ArrowRight', '→')
     .replace('ArrowUp', '↑')
     .replace('ArrowDown', '↓')
+    .replace(/Key([A-Z])/g, '$1')
     .replace(/\+/g, ' + ');
 }
 

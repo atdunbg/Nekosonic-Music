@@ -195,6 +195,13 @@
     overflow: hidden;
     overscroll-behavior: none;
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  input, textarea, [contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   ::-webkit-scrollbar {

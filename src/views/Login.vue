@@ -88,7 +88,7 @@ function startPolling() {
                 statusColor.value = 'text-content-2';
             } else if (code === 802) {
                 statusText.value = '请在手机上确认登录';
-                statusColor.value = 'text-warning';
+                statusColor.value = 'text-yellow-400';
             } else if (code === 803) {
                 clearInterval(pollTimer!);
                 statusText.value = '登录成功！';

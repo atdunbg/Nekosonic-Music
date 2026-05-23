@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod api;
 mod audio;
+mod media_controls;
 use api::ApiController;
 use audio::AppAudio;
 
@@ -24,6 +25,27 @@ pub fn run() {
             let audio_controller = audio::AudioController::new(app.handle().clone());
             let app_audio = AppAudio(std::sync::Mutex::new(audio_controller));
             app.manage(app_audio);
+
+            #[cfg(target_os = "windows")]
+            {
+                use raw_window_handle::HasWindowHandle;
+                use raw_window_handle::RawWindowHandle;
+                let hwnd = if let Some(win) = app.get_webview_window("main") {
+                    win.window_handle().ok().and_then(|h| {
+                        if let RawWindowHandle::Win32(h) = h.as_raw() {
+                            Some(h.hwnd.get() as *mut std::ffi::c_void)
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                };
+                media_controls::start_media_controls(app.handle().clone(), hwnd);
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            media_controls::start_media_controls(app.handle().clone(), None);
 
             let show = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
             let _sep1 = PredefinedMenuItem::separator(app)?;
@@ -144,6 +166,7 @@ pub fn run() {
             audio::get_output_devices,
             audio::set_output_device,
             audio::seek_audio,
+            audio::get_audio_position,
             audio::set_volume,
 
             api::download_song,
