@@ -318,6 +318,21 @@ pub async fn personal_fm(state: State<'_, ApiController>) -> Result<String, Stri
     api_call!(state, personal_fm)
 }
 
+/// 听歌打卡查询参数
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrobbleQuery {
+    pub id: u64,
+    pub sourceid: Option<String>,
+    pub time: u64,
+}
+
+/// 听歌打卡
+#[tauri::command]
+pub async fn scrobble(query: ScrobbleQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, scrobble, params: [("id", &query.id.to_string()), ("sourceid", query.sourceid.as_deref().unwrap_or("")), ("time", &query.time.to_string())])
+}
+
 /// 获取歌曲详情
 #[tauri::command]
 pub async fn get_song_detail(id: String, state: State<'_, ApiController>) -> Result<String, String> {

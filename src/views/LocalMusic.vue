@@ -7,7 +7,6 @@
       <h1 class="text-2xl font-bold">本地音乐</h1>
       <span v-if="songs.length" class="text-xs text-content-3">{{ songs.length }} 首</span>
       <button
-        v-if="songs.length"
         @click="refresh"
         class="px-3 py-1 bg-muted hover:bg-emphasis rounded-full text-xs transition"
       >
@@ -75,13 +74,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onActivated, onBeforeUnmount, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayerStore } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
 import { useSettingsStore } from '../stores/settings';
 import { showToast } from '../composables/useToast';
-import { pageCacheSet, pageCacheInvalidate } from '../composables/usePageCache';
+import { pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import SongListItem from '../components/SongListItem.vue';
 import type { Song } from '../utils/song';
 
@@ -158,6 +157,12 @@ async function fetchMissingCovers() {
 }
 
 onMounted(refresh);
+
+onActivated(() => {
+  if (pageCacheIsStale('localMusic')) refresh();
+});
+
+watch(() => settings.downloadPath, () => { refresh(); });
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';

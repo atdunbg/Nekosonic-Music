@@ -1,6 +1,6 @@
 [package]
 name = "Nekosonic"
-version = "0.5.0"
+version = "0.5.1"
 description = "A Simple music app"
 authors = ["atdunbg"]
 edition = "2021"

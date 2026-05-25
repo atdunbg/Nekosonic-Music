@@ -22,3 +22,9 @@ export function pageCacheDelete(key: string) {
 export function pageCacheInvalidate(key: string) {
   cache.delete(key);
 }
+
+export function pageCacheIsStale(key: string): boolean {
+  const entry = cache.get(key);
+  if (!entry) return true;
+  return Date.now() - entry.ts > TTL;
+}

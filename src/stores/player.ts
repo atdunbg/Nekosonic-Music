@@ -111,7 +111,33 @@ export const usePlayerStore = defineStore('player', () => {
   }, { deep: true });
 
   const isFmMode = ref(false);
+  const fmQueue: Song[] = [];
   let fmNextCallback: (() => void) | null = null;
+
+  let lastScrobbleId: number | null = null;
+  let lastScrobbleStartTime: number = 0;
+
+  function reportScrobble() {
+    const song = currentSong.value;
+    if (!song || song.localPath || song.id == null) {
+      lastScrobbleId = null;
+      return;
+    }
+    if (lastScrobbleId === song.id && lastScrobbleStartTime > 0) {
+      const playedSec = Math.round((Date.now() - lastScrobbleStartTime) / 1000);
+      if (playedSec > 5) {
+        invoke('scrobble', {
+          query: {
+            id: song.id,
+            sourceid: isFmMode.value ? String(song.id) : '',
+            time: playedSec,
+          },
+        }).catch(() => {});
+      }
+    }
+    lastScrobbleId = song.id;
+    lastScrobbleStartTime = Date.now();
+  }
 
   function enableFmMode(onNext: () => void) {
     isFmMode.value = true;
@@ -121,6 +147,15 @@ export const usePlayerStore = defineStore('player', () => {
   function disableFmMode() {
     isFmMode.value = false;
     fmNextCallback = null;
+    fmQueue.length = 0;
+  }
+
+  async function fetchFmBatch(): Promise<Song[]> {
+    const jsonStr: string = await invoke('personal_fm');
+    const data = JSON.parse(jsonStr);
+    const raw = data.data || data;
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+    return raw.map((s: any) => normalizeSong(s));
   }
 
   let fmVipSkipCount = 0;
@@ -128,6 +163,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function playFmSong(song: Song) {
     if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
+    reportScrobble();
     if (!song.dt || song.dt === 0) {
       try {
         const jsonStr: string = await invoke('get_song_detail', { id: String(song.id) });
@@ -248,6 +284,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function playCurrent() {
     if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
+    reportScrobble();
     const song = queue.value[currentIndex.value];
     if (!song?.id) {
       console.error('无效的歌曲数据', song);
@@ -494,12 +531,11 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function loadFirstFmSong() {
   try {
-    const jsonStr: string = await invoke('personal_fm');
-    const data = JSON.parse(jsonStr);
-    const songs = data.data || data;
-    if (songs && songs.length > 0) {
-      const song = normalizeSong(songs[0]);
-      enableFmMode(() => loadFirstFmSong());
+    const batch = await fetchFmBatch();
+    if (batch.length > 0) {
+      fmQueue.push(...batch);
+      const song = fmQueue.shift()!;
+      enableFmMode(nextFm);
       await playFmSong(song);
       return true;
     }
@@ -516,15 +552,18 @@ const fmPlaying = ref(false);
 
 async function loadFm() {
   try {
-    const jsonStr: string = await invoke('personal_fm');
-    const data = JSON.parse(jsonStr);
-    const songs = data.data || data;
-    if (songs && songs.length > 0) {
-      const song = normalizeSong(songs[0]);
-      fmSong.value = song;
-      enableFmMode(nextFm);
-      await playFmSong(song);
-      fmPlaying.value = true;
+    if (fmQueue.length === 0) {
+      const batch = await fetchFmBatch();
+      if (batch.length === 0) return;
+      fmQueue.push(...batch);
+    }
+    const song = fmQueue.shift()!;
+    fmSong.value = song;
+    enableFmMode(nextFm);
+    await playFmSong(song);
+    fmPlaying.value = true;
+    if (fmQueue.length <= 1) {
+      fetchFmBatch().then(batch => { fmQueue.push(...batch); }).catch(() => {});
     }
   } catch (e) {
     console.error('FM加载失败', e);
@@ -565,6 +604,7 @@ listen('audio-started', () => {
 listen('audio-ended', () => {
   if (_tickInterval) { clearInterval(_tickInterval); _tickInterval = null; }
   const player = usePlayerStore();
+  player.reportScrobble();
   player.next();
 });
 
@@ -597,6 +637,9 @@ listen<string>('mpris-command', (event) => {
   } else if (cmd.startsWith('SetPosition:')) {
     const posUs = parseInt(cmd.slice(13), 10);
     const posSec = posUs / 1_000_000;
+    if (posSec < 1 && player.currentTime > 5) {
+      return;
+    }
     player.seek(posSec);
   } else if (cmd === 'Raise') {
     getCurrentWindow().show().catch(() => {});
@@ -665,6 +708,8 @@ watch(playing, (val) => {
     closeRoamDrawer,
     toggleRoamDrawer,
     loadFirstFmSong,
+
+    reportScrobble,
 
     fmSong,
     fmPlaying,

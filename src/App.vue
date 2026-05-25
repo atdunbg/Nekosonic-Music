@@ -375,6 +375,12 @@ watch(currentLyricIdx, () => {
   }
 });
 
+watch(showTranslation, () => {
+  if (player.showRoamDrawer && !roamLyricHovering.value) {
+    nextTick(() => scrollToRoamActiveLyric());
+  }
+});
+
 function scrollToRoamActiveLyric() {
   if (!lyricScrollContainer.value || roamLyricHovering.value) return;
   const active = lyricScrollContainer.value.querySelector('.roam-lyric-active') as HTMLElement | null;

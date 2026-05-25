@@ -145,6 +145,7 @@ pub fn run() {
             api::recommend_resource,
             api::recommend_songs,
             api::personal_fm,
+            api::scrobble,
             api::get_song_detail,
             api::get_qr_key,
             api::create_qr,

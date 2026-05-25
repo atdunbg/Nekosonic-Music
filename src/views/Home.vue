@@ -109,12 +109,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onActivated, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
 import { useUserStore } from '../stores/user';
 import { usePlayerStore } from '../stores/player';
-import { pageCacheGet, pageCacheSet, pageCacheInvalidate } from '../composables/usePageCache';
+import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 import { getCoverUrl } from '../utils/song';
 
@@ -197,6 +197,10 @@ onMounted(async () => {
   const d = new Date();
   todayStr.value = `${d.getMonth() + 1}月${d.getDate()}日`;
   await loadData();
+});
+
+onActivated(() => {
+  if (pageCacheIsStale('home')) loadData();
 });
 
 watch(isOnline, (val, old) => {

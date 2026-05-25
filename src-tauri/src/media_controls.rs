@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Listener};
 use souvlaki::{
     MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback,
-    PlatformConfig, SeekDirection,
+    MediaPosition, PlatformConfig, SeekDirection,
 };
 
 struct MediaState {
@@ -79,9 +79,15 @@ pub fn start_media_controls(app_handle: AppHandle, hwnd: Option<*mut std::ffi::c
             };
 
             if let Some(status) = data.get("status").and_then(|v| v.as_str()) {
+                let position_us = data.get("positionUs").and_then(|v| v.as_i64()).unwrap_or(0);
+                let progress = if position_us > 0 {
+                    Some(MediaPosition(std::time::Duration::from_micros(position_us as u64)))
+                } else {
+                    None
+                };
                 let playback = match status {
-                    "playing" => MediaPlayback::Playing { progress: None },
-                    "paused" => MediaPlayback::Paused { progress: None },
+                    "playing" => MediaPlayback::Playing { progress },
+                    "paused" => MediaPlayback::Paused { progress },
                     _ => MediaPlayback::Stopped,
                 };
                 let _ = s.controls.set_playback(playback);

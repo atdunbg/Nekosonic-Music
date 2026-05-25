@@ -44,13 +44,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'DiscoverView' });
 
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onActivated, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { invoke } from '@tauri-apps/api/core';
 import { usePlayerStore } from '../stores/player';
 import SongListItem from '../components/SongListItem.vue';
 import { normalizeSong, type Song } from '../utils/song';
-import { pageCacheGet, pageCacheSet, pageCacheInvalidate } from '../composables/usePageCache';
+import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 
 const router = useRouter();
@@ -87,6 +87,10 @@ onMounted(async () => {
     await handleSearch();
     router.replace({ query: {} });
   }
+});
+
+onActivated(() => {
+  if (pageCacheIsStale('discover_hotTags')) loadHotTags();
 });
 
 watch(isOnline, (val, old) => {

@@ -36,13 +36,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, onActivated, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import SongListItem from '../components/SongListItem.vue';
 import { usePlayerStore } from '../stores/player';
 import { useUserStore } from '../stores/user';
 import { normalizeSong, type Song } from '../utils/song';
-import { pageCacheGet, pageCacheSet, pageCacheInvalidate } from '../composables/usePageCache';
+import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
 
 defineOptions({ name: 'FavoriteSongsView' });
@@ -86,6 +86,10 @@ async function loadData() {
 }
 
 onMounted(loadData);
+
+onActivated(() => {
+  if (pageCacheIsStale('favoriteSongs')) loadData();
+});
 
 watch(isOnline, (val, old) => {
   if (val && !old && userStore.isLoggedIn && songs.value.length === 0) {
