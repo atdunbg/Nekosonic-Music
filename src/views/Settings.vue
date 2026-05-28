@@ -28,19 +28,37 @@
 
     <section class="mb-8">
       <h2 class="text-sm text-content-2 uppercase tracking-wider mb-4">外观</h2>
-      <div>
-        <p class="text-sm font-medium mb-3">主题色</p>
-        <div class="grid grid-cols-4 gap-3">
-          <button
-            v-for="(color, key) in themeColors"
-            :key="key"
-            @click="settings.setTheme(key)"
-            class="flex flex-col items-center gap-2 p-3 rounded-xl transition-all border-2"
-            :class="settings.theme === key ? 'border-white/30 bg-white/5 scale-[1.02]' : 'border-transparent bg-subtle hover:bg-muted'"
-          >
-            <div class="w-8 h-8 rounded-full shadow-md" :style="{ backgroundColor: color }"></div>
-            <span class="text-xs" :class="settings.theme === key ? 'text-content font-medium' : 'text-content-3'">{{ themeLabels[key] }}</span>
-          </button>
+      <div class="space-y-5">
+        <div>
+          <p class="text-sm font-medium mb-3">外观模式</p>
+          <div class="flex gap-3">
+            <button
+              v-for="(label, key) in appearanceLabels"
+              :key="key"
+              @click="settings.setAppearance(key)"
+              class="flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all border-2"
+              :class="settings.appearance === key ? 'border-accent/40 bg-accent/10 scale-[1.02]' : 'border-transparent bg-subtle hover:bg-muted'"
+            >
+              <IconSun v-if="key === 'light'" class="w-4 h-4" :class="settings.appearance === key ? 'text-accent-text' : 'text-content-3'" />
+              <IconMoon v-else class="w-4 h-4" :class="settings.appearance === key ? 'text-accent-text' : 'text-content-3'" />
+              <span class="text-sm" :class="settings.appearance === key ? 'text-content font-medium' : 'text-content-3'">{{ label }}</span>
+            </button>
+          </div>
+        </div>
+        <div>
+          <p class="text-sm font-medium mb-3">主题色</p>
+          <div class="grid grid-cols-4 gap-3">
+            <button
+              v-for="(color, key) in themeColors"
+              :key="key"
+              @click="settings.setTheme(key)"
+              class="flex flex-col items-center gap-2 p-3 rounded-xl transition-all border-2"
+              :class="settings.theme === key ? 'border-accent/40 bg-accent/10 scale-[1.02]' : 'border-transparent bg-subtle hover:bg-muted'"
+            >
+              <div class="w-8 h-8 rounded-full shadow-md" :style="{ backgroundColor: color }"></div>
+              <span class="text-xs" :class="settings.theme === key ? 'text-content font-medium' : 'text-content-3'">{{ themeLabels[key] }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -109,7 +127,7 @@
               class="w-6 h-6 flex items-center justify-center rounded-md text-content-4 hover:text-danger hover:bg-danger/10 transition"
               title="恢复默认"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <IconX style="font-size: 14px" />
             </button>
             <button
               @click="startRecording(String(id))"
@@ -167,8 +185,8 @@
             :disabled="updater.checking.value"
             class="flex items-center gap-2 px-4 py-2 bg-subtle hover:bg-muted rounded-lg text-sm transition"
           >
-            <svg v-if="!updater.checking.value" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <svg v-else class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.22-8.56"/></svg>
+            <IconFileText v-if="!updater.checking.value" class="w-4 h-4" />
+            <IconLoader2 v-else class="w-4 h-4 animate-spin" />
             {{ updater.checking.value ? '检查中...' : '检查更新' }}
           </button>
           <button
@@ -176,7 +194,7 @@
             :disabled="fetchingChangelog"
             class="flex items-center gap-2 px-4 py-2 bg-subtle hover:bg-muted rounded-lg text-sm transition"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <IconFileText class="w-4 h-4" />
             {{ fetchingChangelog ? '获取中...' : '更新日志' }}
           </button>
         </div>
@@ -237,7 +255,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { useSettingsStore, qualityLabels, closeActionLabels, defaultShortcuts, themeLabels, themeColors, type CloseAction } from '../stores/settings';
+import { useSettingsStore, qualityLabels, closeActionLabels, defaultShortcuts, themeLabels, themeColors, appearanceLabels, type CloseAction } from '../stores/settings';
 import { useToast } from '../composables/useToast';
 import { useUpdater } from '../composables/useUpdater';
 import { invoke } from '@tauri-apps/api/core';
@@ -245,6 +263,11 @@ import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open } from '@tauri-apps/plugin-dialog';
 import CustomSelect from '../components/CustomSelect.vue';
+import IconX from '~icons/lucide/x';
+import IconFileText from '~icons/lucide/file-text';
+import IconLoader2 from '~icons/lucide/loader-2';
+import IconSun from '~icons/lucide/sun';
+import IconMoon from '~icons/lucide/moon';
 
 const settings = useSettingsStore();
 const { showToast } = useToast();
@@ -287,7 +310,7 @@ onMounted(async () => {
   appVersion.value = await getVersion();
   try {
     defaultDownloadPath.value = await invoke<string>('get_default_download_path');
-  } catch { }
+  } catch { /* 忽略 */ }
   loadDevices();
 });
 

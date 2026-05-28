@@ -11,7 +11,7 @@
         <div class="relative z-10 p-6 flex flex-col justify-between h-full">
           <div>
             <p class="text-xs text-white/60 mb-1">📅 {{ todayStr }}</p>
-            <h2 class="text-2xl font-bold">每日推荐</h2>
+            <h2 class="text-2xl font-bold text-white">每日推荐</h2>
           </div>
           <p class="text-xs text-white/60">根据你的口味生成，每天凌晨更新</p>
         </div>
@@ -33,15 +33,15 @@
 
         <div class="relative z-10 h-full flex flex-col justify-between p-6">
           <div class="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white/50"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+            <IconRadio class="w-4 h-4 text-white/50" />
             <span class="text-xs text-white/50 font-medium">私人漫游</span>
           </div>
 
           <div class="flex items-end justify-between gap-4">
             <div class="min-w-0 flex-1">
-              <h2 class="text-xl font-bold" v-if="!player.fmSong && userStore.isLoggedIn">发现新音乐</h2>
-              <h2 class="text-xl font-bold" v-else-if="!userStore.isLoggedIn">私人漫游</h2>
-              <h2 class="text-lg font-bold truncate" v-else>{{ fmDisplayName }}</h2>
+              <h2 class="text-xl font-bold text-white" v-if="!player.fmSong && userStore.isLoggedIn">发现新音乐</h2>
+              <h2 class="text-xl font-bold text-white" v-else-if="!userStore.isLoggedIn">私人漫游</h2>
+              <h2 class="text-lg font-bold truncate text-white" v-else>{{ fmDisplayName }}</h2>
               <p v-if="!userStore.isLoggedIn" class="text-xs text-white/50 mt-1">登录后开启沉浸式音乐探索</p>
               <p v-else-if="!player.fmSong" class="text-xs text-white/50 mt-1">根据你的喜好，为你推荐意想不到的好歌</p>
               <p v-else class="text-xs text-white/60 truncate mt-1">{{ fmDisplayArtists }}</p>
@@ -50,24 +50,17 @@
               <button v-if="userStore.isLoggedIn && !player.fmSong"
                 @click.stop="startFmPlay"
                 class="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm transition">
-                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
-                  <path d="M4 2.5v11l9-5.5z" />
-                </svg>
+                <IconPlay class="w-4 h-4 fill-current text-white" />
               </button>
               <template v-if="player.fmSong">
                 <button @click.stop="player.toggleFm"
                   class="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm transition">
-                  <svg v-if="player.fmPlaying" width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
-                    <rect x="3" y="2" width="3" height="12" rx="0.5" />
-                    <rect x="10" y="2" width="3" height="12" rx="0.5" />
-                  </svg>
-                  <svg v-else width="18" height="18" viewBox="0 0 16 16" fill="currentColor" class="text-white">
-                    <path d="M4 2.5v11l9-5.5z" />
-                  </svg>
+                  <IconPause v-if="player.fmPlaying" class="w-[18px] h-[18px] fill-current text-white" />
+                  <IconPlay v-else class="w-[18px] h-[18px] fill-current text-white" />
                 </button>
                 <button @click.stop="player.nextFm"
                   class="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                  <IconSkipForward class="w-[14px] h-[14px] text-white" />
                 </button>
               </template>
             </div>
@@ -131,6 +124,10 @@ const todayStr = ref('');
 const RANK_IDS = [3778678, 3779629, 19723756, 2884035];
 
 import { computed } from 'vue';
+import IconRadio from '~icons/lucide/radio';
+import IconPlay from '~icons/lucide/play';
+import IconPause from '~icons/lucide/pause';
+import IconSkipForward from '~icons/lucide/skip-forward';
 
 
 const fmCoverUrl = computed(() => {
@@ -187,7 +184,7 @@ async function loadData() {
       const json = await invoke('recommend_resource');
       const data = JSON.parse(json as string);
       recPlaylists.value = data.recommend || [];
-    } catch { }
+    } catch { /* 忽略 */ }
   }
 
   pageCacheSet('home', { rankPlaylists: rankPlaylists.value, recPlaylists: recPlaylists.value });

@@ -33,3 +33,47 @@ export function getCoverUrl(song: Song | null, sizeParam = ''): string {
   if (!sizeParam || raw.startsWith('data:')) return raw;
   return raw + sizeParam;
 }
+
+const colorCache = new Map<string, string>();
+
+export function extractDominantColor(imageUrl: string): Promise<string> {
+  if (colorCache.has(imageUrl)) {
+    return Promise.resolve(colorCache.get(imageUrl)!);
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const size = 8;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(''); return; }
+        ctx.drawImage(img, 0, 0, size, size);
+        const data = ctx.getImageData(0, 0, size, size).data;
+
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          r += data[i];
+          g += data[i + 1];
+          b += data[i + 2];
+          count++;
+        }
+        r = Math.round(r / count);
+        g = Math.round(g / count);
+        b = Math.round(b / count);
+
+        const color = `rgb(${r}, ${g}, ${b})`;
+        colorCache.set(imageUrl, color);
+        resolve(color);
+      } catch {
+        resolve('');
+      }
+    };
+    img.onerror = () => resolve('');
+    img.src = imageUrl;
+  });
+}

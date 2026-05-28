@@ -23,7 +23,7 @@
             @click="playAll"
             class="px-5 py-2 bg-accent hover:bg-accent-hover rounded-full text-white font-medium transition flex items-center gap-2"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
+            <IconPlay class="w-4 h-4 fill-current" />
             播放全部
           </button>
           <button
@@ -32,10 +32,7 @@
             class="px-4 py-2 bg-muted hover:bg-emphasis rounded-full text-sm transition flex items-center gap-2"
             :class="subscribed ? 'text-accent-text' : 'text-content/70'"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path v-if="subscribed" d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-              <path v-else d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
-            </svg>
+            <IconBookmark class="w-4 h-4" :class="subscribed ? 'fill-current' : ''" />
             {{ subscribed ? '已收藏' : '收藏歌单' }}
           </button>
         </div>
@@ -59,23 +56,7 @@
         show-playing-overlay
         :container-class="player.currentSong?.id === song.id ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
         @click="player.playFromList(songs, index)"
-      >
-        <template #index="{ index: idx, isCurrent }">
-          <div class="w-6 text-right flex-shrink-0 flex items-center justify-end h-5">
-            <div v-if="isCurrent" class="flex items-center justify-end">
-              <div class="flex items-center gap-[3px] h-4">
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 50%; animation-delay: 0ms"></span>
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 100%; animation-delay: 150ms"></span>
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 35%; animation-delay: 300ms"></span>
-              </div>
-            </div>
-            <template v-else>
-              <span class="text-xs text-content-3 group-hover:hidden">{{ idx + 1 }}</span>
-              <svg class="hidden group-hover:block text-content" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
-            </template>
-          </div>
-        </template>
-      </SongListItem>
+      />
     </div>
 
     <div v-if="playlist" class="mt-8">
@@ -95,6 +76,8 @@ import { formatPlayCount } from '../utils/format';
 import { normalizeSong, type Song } from '../utils/song';
 import SongListItem from '../components/SongListItem.vue';
 import CommentSection from '../components/CommentSection.vue';
+import IconPlay from '~icons/lucide/play';
+import IconBookmark from '~icons/lucide/bookmark';
 
 const route = useRoute();
 const player = usePlayerStore();

@@ -13,7 +13,6 @@ const routes = [
   { path: '/', name: 'home', component: Home },
   { path: '/discover', name: 'discover', component: Discover },
   { path: '/search', name: 'search', component: Discover },
-  { path: '/roam', name: 'roam', component: () => import('@/views/Roam.vue') },
   { path: '/favorites', name: 'favorites', component: FavoriteSongs },
   { path: '/recent', name: 'recent', component: RecentPlays },
   { path: '/daily', name: 'daily', component: DailySongs },
@@ -37,7 +36,7 @@ router.beforeEach((to) => {
       try {
         const data = JSON.parse(raw);
         if (data?.userId) return { name: 'home' };
-      } catch {}
+      } catch { /* 忽略 */ }
     }
   }
 });

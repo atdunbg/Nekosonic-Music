@@ -3,13 +3,14 @@
     <button @click="$router.back()" class="mb-4 text-content-2 hover:text-content transition">
       ← 返回
     </button>
-    <div class="flex items-center gap-4 mb-6">
+    <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">我喜欢的音乐</h1>
       <button
         v-if="songs.length"
         @click="player.playAll(songs)"
-        class="px-4 py-1.5 bg-muted hover:bg-emphasis rounded-full text-sm transition"
+        class="px-5 py-2 bg-accent hover:bg-accent-hover rounded-full text-white font-medium transition flex items-center gap-2"
       >
+        <IconPlay class="w-4 h-4 fill-current" />
         播放全部
       </button>
     </div>
@@ -18,17 +19,20 @@
     </div>
     <div v-else-if="loading" class="text-content-2">加载中...</div>
     <div v-else-if="songs.length === 0" class="text-content-2">暂无喜欢的音乐</div>
-    <div v-else class="space-y-2">
+    <div v-else class="space-y-1">
       <SongListItem
         v-for="(song, index) in songs"
         :key="song.id"
         :song="song"
         :index="index"
+        :is-current="player.currentSong?.id === song.id"
         show-index
         show-like
         show-download
         show-menu
         show-duration
+        show-playing-overlay
+        :container-class="player.currentSong?.id === song.id ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
         @click="player.playFromList(songs, index)"
       />
     </div>
@@ -44,6 +48,7 @@ import { useUserStore } from '../stores/user';
 import { normalizeSong, type Song } from '../utils/song';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
+import IconPlay from '~icons/lucide/play';
 
 defineOptions({ name: 'FavoriteSongsView' });
 

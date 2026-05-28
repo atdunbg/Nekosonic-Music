@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia';
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 
 export type AudioQuality = 'standard' | 'higher' | 'exhigh' | 'lossless' | 'hires';
-export type ThemeName = 'blue' | 'green' | 'rose' | 'violet' | 'orange' | 'cyan' | 'pink';
+export type ThemeColor = 'blue' | 'green' | 'rose' | 'violet' | 'orange' | 'cyan' | 'pink';
+export type Appearance = 'dark' | 'light';
 export type CloseAction = 'ask' | 'minimize' | 'exit';
 
-export const themeLabels: Record<ThemeName, string> = {
+export const themeLabels: Record<ThemeColor, string> = {
   blue: '天蓝',
   green: '翠绿',
   rose: '玫红',
@@ -15,7 +16,7 @@ export const themeLabels: Record<ThemeName, string> = {
   pink: '粉色',
 };
 
-export const themeColors: Record<ThemeName, string> = {
+export const themeColors: Record<ThemeColor, string> = {
   blue: '#3b82f6',
   green: '#22c55e',
   rose: '#f43f5e',
@@ -23,6 +24,11 @@ export const themeColors: Record<ThemeName, string> = {
   orange: '#f97316',
   cyan: '#06b6d4',
   pink: '#ec4899',
+};
+
+export const appearanceLabels: Record<Appearance, string> = {
+  dark: '深色',
+  light: '浅色',
 };
 
 export const qualityLabels: Record<AudioQuality, string> = {
@@ -60,7 +66,8 @@ export const defaultShortcuts: Record<string, ShortcutBinding> = {
 interface SettingsData {
   audioQuality: AudioQuality;
   downloadPath: string;
-  theme: ThemeName;
+  theme: ThemeColor;
+  appearance: Appearance;
   closeAction: CloseAction;
   shortcuts: Record<string, ShortcutBinding>;
   outputDevice: string | null;
@@ -73,22 +80,38 @@ function loadSettings(): SettingsData {
     if (raw) {
       const parsed = JSON.parse(raw);
       const theme = parsed.theme || parsed.accentColor || 'blue';
-      const validThemes: ThemeName[] = ['blue', 'green', 'rose', 'violet', 'orange', 'cyan', 'pink'];
+      const validThemes: ThemeColor[] = ['blue', 'green', 'rose', 'violet', 'orange', 'cyan', 'pink'];
+      const validAppearances: Appearance[] = ['dark', 'light'];
+      const appearance = validAppearances.includes(parsed.appearance) ? parsed.appearance : 'dark';
+      if (parsed.theme && parsed.theme.startsWith('light-')) {
+        return {
+          audioQuality: parsed.audioQuality || 'standard',
+          downloadPath: parsed.downloadPath || '',
+          theme: validThemes.includes(parsed.theme.slice(6)) ? parsed.theme.slice(6) : 'blue',
+          appearance: 'light',
+          closeAction: parsed.closeAction || 'ask',
+          shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
+          outputDevice: parsed.outputDevice || null,
+          volume: typeof parsed.volume === 'number' ? parsed.volume : 100,
+        };
+      }
       return {
         audioQuality: parsed.audioQuality || 'standard',
         downloadPath: parsed.downloadPath || '',
         theme: validThemes.includes(theme) ? theme : 'blue',
+        appearance,
         closeAction: parsed.closeAction || 'ask',
         shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
         outputDevice: parsed.outputDevice || null,
         volume: typeof parsed.volume === 'number' ? parsed.volume : 100,
       };
     }
-  } catch {}
+  } catch { /* 忽略 */ }
   return {
     audioQuality: 'standard',
     downloadPath: '',
     theme: 'blue',
+    appearance: 'dark',
     closeAction: 'ask',
     shortcuts: { ...defaultShortcuts },
     outputDevice: null,
@@ -101,11 +124,16 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const audioQuality = ref<AudioQuality>(saved.audioQuality);
   const downloadPath = ref<string>(saved.downloadPath);
-  const theme = ref<ThemeName>(saved.theme);
+  const theme = ref<ThemeColor>(saved.theme);
+  const appearance = ref<Appearance>(saved.appearance);
   const closeAction = ref<CloseAction>(saved.closeAction || 'ask');
   const shortcuts = ref<Record<string, ShortcutBinding>>(saved.shortcuts);
   const outputDevice = ref<string | null>(saved.outputDevice);
   const volume = ref<number>(saved.volume);
+
+  const dataTheme = computed(() =>
+    appearance.value === 'light' ? `light-${theme.value}` : theme.value
+  );
 
   function setAudioQuality(q: AudioQuality) {
     audioQuality.value = q;
@@ -115,8 +143,12 @@ export const useSettingsStore = defineStore('settings', () => {
     downloadPath.value = p;
   }
 
-  function setTheme(t: ThemeName) {
+  function setTheme(t: ThemeColor) {
     theme.value = t;
+  }
+
+  function setAppearance(a: Appearance) {
+    appearance.value = a;
   }
 
   function setCloseAction(a: CloseAction) {
@@ -139,17 +171,19 @@ export const useSettingsStore = defineStore('settings', () => {
     audioQuality.value = 'standard';
     downloadPath.value = '';
     theme.value = 'blue';
+    appearance.value = 'dark';
     closeAction.value = 'ask';
     shortcuts.value = { ...defaultShortcuts };
     outputDevice.value = null;
     volume.value = 100;
   }
 
-  watch([audioQuality, downloadPath, theme, closeAction, shortcuts, outputDevice, volume], () => {
+  watch([audioQuality, downloadPath, theme, appearance, closeAction, shortcuts, outputDevice, volume], () => {
     const data: SettingsData = {
       audioQuality: audioQuality.value,
       downloadPath: downloadPath.value,
       theme: theme.value,
+      appearance: appearance.value,
       closeAction: closeAction.value,
       shortcuts: shortcuts.value,
       outputDevice: outputDevice.value,
@@ -162,6 +196,8 @@ export const useSettingsStore = defineStore('settings', () => {
     audioQuality,
     downloadPath,
     theme,
+    appearance,
+    dataTheme,
     closeAction,
     shortcuts,
     outputDevice,
@@ -169,6 +205,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setAudioQuality,
     setDownloadPath,
     setTheme,
+    setAppearance,
     setCloseAction,
     setOutputDevice,
     setShortcut,

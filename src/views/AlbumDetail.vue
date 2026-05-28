@@ -9,11 +9,11 @@
       <div class="flex flex-col justify-between min-w-0">
         <div>
           <h1 class="text-2xl font-bold leading-tight">{{ album.name }}</h1>
-          <div v-if="album.artists?.length" class="flex items-center gap-1 mt-2 text-sm text-content-2">
+          <div v-if="album.artists?.length" class="flex flex-wrap items-center gap-x-1 gap-y-0.5 mt-2 text-sm text-content-2">
             <template v-for="(ar, idx) in album.artists" :key="ar.id">
               <span v-if="(idx as number) > 0" class="text-content-3">/</span>
               <span
-                class="hover:text-accent-text cursor-pointer transition"
+                class="hover:text-accent-text cursor-pointer transition whitespace-nowrap"
                 @click="ar.id && router.push({ name: 'artist', params: { id: ar.id } })"
               >{{ ar.name }}</span>
             </template>
@@ -27,7 +27,7 @@
             @click="playAll"
             class="px-5 py-2 bg-accent hover:bg-accent-hover rounded-full text-white font-medium transition flex items-center gap-2"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
+            <IconPlay class="w-4 h-4 fill-current" />
             播放全部
           </button>
         </div>
@@ -51,23 +51,7 @@
         show-playing-overlay
         :container-class="player.currentSong?.id === song.id ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
         @click="player.playFromList(songs, index)"
-      >
-        <template #index="{ index: idx, isCurrent }">
-          <div class="w-6 text-right flex-shrink-0 flex items-center justify-end h-5">
-            <div v-if="isCurrent" class="flex items-center justify-end">
-              <div class="flex items-center gap-[3px] h-4">
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 50%; animation-delay: 0ms"></span>
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 100%; animation-delay: 150ms"></span>
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 35%; animation-delay: 300ms"></span>
-              </div>
-            </div>
-            <template v-else>
-              <span class="text-xs text-content-3 group-hover:hidden">{{ idx + 1 }}</span>
-              <svg class="hidden group-hover:block text-content" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
-            </template>
-          </div>
-        </template>
-      </SongListItem>
+      />
     </div>
   </div>
 </template>
@@ -80,6 +64,7 @@ import { usePlayerStore } from '../stores/player';
 import { normalizeSong, type Song } from '../utils/song';
 import { formatDate } from '../utils/format';
 import SongListItem from '../components/SongListItem.vue';
+import IconPlay from '~icons/lucide/play';
 
 const route = useRoute();
 const router = useRouter();

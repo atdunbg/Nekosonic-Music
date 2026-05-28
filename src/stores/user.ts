@@ -21,7 +21,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function logout() {
-    try { await invoke('logout'); } catch {}
+    try { await invoke('logout'); } catch { /* 忽略 */ }
     user.value = null;
     isLoggedIn.value = false;
     localStorage.removeItem('user_profile');

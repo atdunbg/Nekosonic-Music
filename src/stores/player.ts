@@ -16,7 +16,7 @@ function loadRecentLocal(): Song[] {
   try {
     const raw = localStorage.getItem('recent_local');
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { /* 忽略 */ }
   return [];
 }
 
@@ -24,7 +24,7 @@ function loadLikedIdsFromStorage(): Set<number> {
   try {
     const raw = localStorage.getItem('liked_ids');
     if (raw) return new Set(JSON.parse(raw));
-  } catch {}
+  } catch { /* 忽略 */ }
   return new Set();
 }
 
@@ -43,7 +43,12 @@ export const usePlayerStore = defineStore('player', () => {
   watch(volume, (val) => { settings.volume = val; });
 
   let tickInterval: ReturnType<typeof setInterval> | null = null;
-  function setTickInterval(v: ReturnType<typeof setInterval> | null) { _tickInterval = v; tickInterval = v; }
+  function clearTick() {
+    if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+  }
+  function setTick(v: ReturnType<typeof setInterval>) {
+    tickInterval = v;
+  }
 
   const recentLocal = ref<Song[]>(loadRecentLocal());
   const MAX_RECENT = 200;
@@ -114,6 +119,9 @@ export const usePlayerStore = defineStore('player', () => {
   const fmQueue: Song[] = [];
   let fmNextCallback: (() => void) | null = null;
 
+  const fmMode = ref<string>('DEFAULT');
+  const fmSubMode = ref<string>('');
+
   let lastScrobbleId: number | null = null;
   let lastScrobbleStartTime: number = 0;
 
@@ -148,10 +156,36 @@ export const usePlayerStore = defineStore('player', () => {
     isFmMode.value = false;
     fmNextCallback = null;
     fmQueue.length = 0;
+    fmMode.value = 'DEFAULT';
+    fmSubMode.value = '';
+    fmSong.value = null;
+    fmPlaying.value = false;
+  }
+
+  function clearFmQueue() {
+    fmQueue.length = 0;
+  }
+
+  async function fmTrash(songId: number) {
+    try {
+      await invoke('fm_trash', { query: { id: songId, time: 25 } });
+    } catch (e) {
+      console.error('fm_trash 失败', e);
+    }
+    await nextFm();
   }
 
   async function fetchFmBatch(): Promise<Song[]> {
-    const jsonStr: string = await invoke('personal_fm');
+    const isDefault = fmMode.value === 'DEFAULT' && !fmSubMode.value;
+    const jsonStr: string = isDefault
+      ? await invoke('personal_fm')
+      : await invoke('personal_fm_mode', {
+          query: {
+            mode: fmMode.value,
+            subMode: fmSubMode.value,
+            limit: 3,
+          },
+        });
     const data = JSON.parse(jsonStr);
     const raw = data.data || data;
     if (!Array.isArray(raw) || raw.length === 0) return [];
@@ -162,7 +196,7 @@ export const usePlayerStore = defineStore('player', () => {
   const MAX_FM_VIP_SKIP = 10;
 
   async function playFmSong(song: Song) {
-    if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
+    clearTick();
     reportScrobble();
     if (!song.dt || song.dt === 0) {
       try {
@@ -174,7 +208,7 @@ export const usePlayerStore = defineStore('player', () => {
           song.al = full.al || song.al;
           song.ar = full.ar || song.ar;
         }
-      } catch (e) { /* 忽略 */ }
+      } catch { /* 忽略 */ }
     }
 
     await invoke('stop_audio');
@@ -283,7 +317,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function playCurrent() {
-    if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
+    clearTick();
     reportScrobble();
     const song = queue.value[currentIndex.value];
     if (!song?.id) {
@@ -345,13 +379,13 @@ export const usePlayerStore = defineStore('player', () => {
   let onSeekStart: (() => void) | null = null;
 
   function startTick() {
-    if (tickInterval) clearInterval(tickInterval);
+    clearTick();
     let seekGuard = false;
     onSeekStart = () => { seekGuard = true; };
     let syncCounter = 1;
     let lastSyncPos = -1;
     let backendFrozen = false;
-    setTickInterval(setInterval(async () => {
+    setTick(setInterval(async () => {
       if (playing.value && duration.value > 0) {
         if (seekGuard) return;
         syncCounter++;
@@ -371,7 +405,7 @@ export const usePlayerStore = defineStore('player', () => {
               backendFrozen = false;
               lastSyncPos = pos;
             }
-          } catch {}
+          } catch { /* 忽略 */ }
         } else {
           if (!backendFrozen) {
             const next = currentTime.value + 0.25;
@@ -403,7 +437,7 @@ export const usePlayerStore = defineStore('player', () => {
     playing.value = false;
     currentSong.value = null;
     currentTime.value = 0;
-    if (tickInterval) { clearInterval(tickInterval); setTickInterval(null); }
+    clearTick();
     disableFmMode();
     emitPlaybackState();
   }
@@ -509,6 +543,7 @@ export const usePlayerStore = defineStore('player', () => {
   const showRoamDrawer = ref(false);
   const roamInitialTab = ref<'lyric' | 'comment'>('lyric');
   const commentSongId = ref<number | null>(null);
+  const dominantColor = ref('');
 
   function openRoamDrawer(tab: 'lyric' | 'comment' = 'lyric') {
     roamInitialTab.value = tab;
@@ -545,8 +580,6 @@ export const usePlayerStore = defineStore('player', () => {
   return false;
 }
 
-
-// -------- FM 专属状态 --------
 const fmSong = ref<Song | null>(null);
 const fmPlaying = ref(false);
 
@@ -592,7 +625,6 @@ async function nextFm() {
 }
 
 let _audioStartedResolve: (() => void) | null = null;
-let _tickInterval: ReturnType<typeof setInterval> | null = null;
 
 listen('audio-started', () => {
   if (_audioStartedResolve) {
@@ -602,8 +634,8 @@ listen('audio-started', () => {
 });
 
 listen('audio-ended', () => {
-  if (_tickInterval) { clearInterval(_tickInterval); _tickInterval = null; }
   const player = usePlayerStore();
+  player.clearTick();
   player.reportScrobble();
   player.next();
 });
@@ -703,16 +735,23 @@ watch(playing, (val) => {
     showRoamDrawer,
     roamInitialTab,
     commentSongId,
+    dominantColor,
     openCommentForSong,
     openRoamDrawer,
     closeRoamDrawer,
     toggleRoamDrawer,
     loadFirstFmSong,
 
+    fetchFmBatch,
+    clearFmQueue,
+    fmTrash,
     reportScrobble,
+    clearTick,
 
     fmSong,
     fmPlaying,
+    fmMode,
+    fmSubMode,
     loadFm,
     toggleFm,
     nextFm,

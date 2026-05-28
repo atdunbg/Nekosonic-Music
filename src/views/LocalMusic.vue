@@ -26,7 +26,8 @@
         :is-current="player.currentSong?.id === song.id"
         show-index
         show-duration
-        :container-class="player.currentSong?.id === song.id ? 'bg-subtle hover:bg-subtle' : 'hover:bg-subtle'"
+        show-playing-overlay
+        :container-class="player.currentSong?.id === song.id ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
         @click="player.playFromList(normalizedSongs, index)"
       >
         <template #actions>
@@ -37,12 +38,12 @@
               class="text-content-3 hover:text-content transition p-1 rounded hover:bg-muted"
               title="更多"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+              <IconEllipsis class="w-4 h-4 fill-current" />
             </button>
             <Transition name="fade">
               <div v-if="openMenuId === songs[index].id" class="absolute right-0 top-full mt-1 w-44 bg-surface border border-line rounded-xl shadow-2xl overflow-hidden z-50" @click.stop>
                 <button @click="confirmDelete(songs[index])" class="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger/80 hover:bg-danger/10 transition">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  <IconTrash2 style="font-size: 14px" />
                   从磁盘中删除
                 </button>
               </div>
@@ -82,6 +83,8 @@ import { useSettingsStore } from '../stores/settings';
 import { showToast } from '../composables/useToast';
 import { pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import SongListItem from '../components/SongListItem.vue';
+import IconEllipsis from '~icons/lucide/ellipsis';
+import IconTrash2 from '~icons/lucide/trash-2';
 import type { Song } from '../utils/song';
 
 defineOptions({ name: 'LocalMusicView' });
@@ -153,7 +156,7 @@ async function fetchMissingCovers() {
       const url = detailMap.get(song.id);
       if (url) song.cover = url;
     }
-  } catch {}
+  } catch { /* 忽略 */ }
 }
 
 onMounted(refresh);

@@ -39,7 +39,7 @@ export function useUpdater() {
   function setIgnoredVersion(version: string) {
     try {
       localStorage.setItem(IGNORED_VERSION_KEY, version)
-    } catch {}
+    } catch { /* 忽略 */ }
   }
 
   async function checkForUpdate(silent = false): Promise<UpdateInfo | null> {

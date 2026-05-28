@@ -29,23 +29,7 @@
         show-playing-overlay
         :container-class="isCurrentSong(song.id) ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
         @click="player.playFromList(songs, index)"
-      >
-        <template #index="{ index: idx, isCurrent }">
-          <div class="w-6 text-right flex-shrink-0 flex items-center justify-end h-5">
-            <div v-if="isCurrent" class="flex items-center justify-end">
-              <div class="flex items-center gap-[3px] h-4">
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 50%; animation-delay: 0ms"></span>
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 100%; animation-delay: 150ms"></span>
-                <span class="w-[3px] bg-accent-text rounded-full animate-bounce" style="height: 35%; animation-delay: 300ms"></span>
-              </div>
-            </div>
-            <template v-else>
-              <span class="text-xs text-content-3 group-hover:hidden">{{ idx + 1 }}</span>
-              <svg class="hidden group-hover:block text-content" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
-            </template>
-          </div>
-        </template>
-      </SongListItem>
+      />
     </div>
   </div>
 </template>

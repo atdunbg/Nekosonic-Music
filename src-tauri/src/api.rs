@@ -123,6 +123,20 @@ impl ApiController {
 #[derive(Deserialize)]
 pub struct SearchQuery { pub keyword: String }
 
+/// 多类型搜索查询参数
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudSearchQuery {
+    pub keyword: String,
+    pub search_type: Option<i64>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+/// 搜索建议查询参数
+#[derive(Deserialize)]
+pub struct SearchSuggestQuery { pub keyword: String }
+
 /// 手机号登录查询参数
 #[derive(Deserialize)]
 pub struct LoginQuery { pub phone: String, pub password: String }
@@ -135,6 +149,23 @@ pub struct QrKeyQuery { pub key: String }
 #[tauri::command]
 pub async fn search_songs(query: SearchQuery, state: State<'_, ApiController>) -> Result<String, String> {
     api_call!(state, cloudsearch, params: [("keywords", &query.keyword), ("type", "1"), ("limit", "30")])
+}
+
+/// 多类型搜索（歌曲/歌手/专辑）
+#[tauri::command]
+pub async fn cloudsearch(query: CloudSearchQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, cloudsearch, params: [
+        ("keywords", &query.keyword),
+        ("type", &query.search_type.unwrap_or(1).to_string()),
+        ("limit", &query.limit.unwrap_or(30).to_string()),
+        ("offset", &query.offset.unwrap_or(0).to_string())
+    ])
+}
+
+/// 搜索建议
+#[tauri::command]
+pub async fn search_suggest(query: SearchSuggestQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, search_suggest, params: [("keywords", &query.keyword)])
 }
 
 /// 获取热搜词列表
@@ -310,6 +341,42 @@ pub async fn recommend_songs(state: State<'_, ApiController>) -> Result<String, 
 #[tauri::command]
 pub async fn recommend_resource(state: State<'_, ApiController>) -> Result<String, String> {
     api_call!(state, recommend_resource)
+}
+
+/// 私人漫游模式查询参数
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonalFmModeQuery {
+    pub mode: Option<String>,
+    pub sub_mode: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// 私人漫游（带模式）
+#[tauri::command]
+pub async fn personal_fm_mode(query: PersonalFmModeQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, personal_fm_mode, params: [
+        ("mode", query.mode.as_deref().unwrap_or("DEFAULT")),
+        ("submode", query.sub_mode.as_deref().unwrap_or("")),
+        ("limit", &query.limit.unwrap_or(3).to_string())
+    ])
+}
+
+/// FM 不喜欢查询参数
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FmTrashQuery {
+    pub id: u64,
+    pub time: Option<i64>,
+}
+
+/// FM 不喜欢（减少推荐）
+#[tauri::command]
+pub async fn fm_trash(query: FmTrashQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, fm_trash, params: [
+        ("id", &query.id.to_string()),
+        ("time", &query.time.unwrap_or(25).to_string())
+    ])
 }
 
 /// 获取私人漫游歌曲

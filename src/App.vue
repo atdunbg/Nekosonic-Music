@@ -16,23 +16,24 @@
       <nav class="w-56 flex-shrink-0 flex flex-col bg-surface/80 backdrop-blur">
         <div class="flex-1 p-4 overflow-y-auto min-h-0">
           <div class="flex flex-col min-h-full">
-          <div class="relative mb-4">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-content-3" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <input v-model="searchQuery" @keydown.enter="doSearch" type="text" placeholder="搜索音乐..."
-              class="w-full rounded-lg bg-subtle pl-9 pr-3 py-2 text-sm text-content placeholder-content-3 outline-none focus:bg-muted transition" />
-          </div>
           <div class="space-y-0.5">
             <router-link to="/"
               class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
               active-class="!text-content !bg-muted">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V10"/></svg>
+              <IconHome class="w-[18px] h-[18px]" />
               推荐
+            </router-link>
+            <router-link to="/discover"
+              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
+              active-class="!text-content !bg-muted">
+              <IconSearch class="w-[18px] h-[18px]" />
+              发现
             </router-link>
             <button
               @click="openRoamFromSidebar"
               class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle w-full text-left"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+              <IconRadio class="w-[18px] h-[18px]" />
               漫游
             </button>
           </div>
@@ -43,51 +44,54 @@
               <router-link to="/favorites"
                 class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
                 active-class="!text-content !bg-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+                <IconHeart class="w-[18px] h-[18px]" />
                 我喜欢的音乐
               </router-link>
               <router-link to="/recent"
                 class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
                 active-class="!text-content !bg-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                <IconClock class="w-[18px] h-[18px]" />
                 最近播放
               </router-link>
               <router-link to="/local-music"
                 class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
                 active-class="!text-content !bg-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                <IconMusic class="w-[18px] h-[18px]" />
                 本地音乐
               </router-link>
             </div>
           </div>
 
           <div class="mt-4 mb-1 pt-2" v-if="userStore.isLoggedIn">
-            <div class="flex items-center justify-between px-3 mb-1 cursor-pointer"
+            <div class="flex items-center justify-between px-3 mb-1 cursor-pointer group"
               @click="showCreatedPlaylists = !showCreatedPlaylists">
               <p class="text-xs text-content-3">我的歌单</p>
-              <span class="text-xs text-content-3 transition-transform"
-                :class="{ 'rotate-90': showCreatedPlaylists }">▶</span>
+              <IconChevronRight class="w-3 h-3 text-content-3 transition-transform" :class="{ 'rotate-90': showCreatedPlaylists }" />
             </div>
             <div v-show="showCreatedPlaylists" class="space-y-0.5">
               <div v-for="pl in createdPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
-                class="px-3 py-1.5 rounded-lg text-sm cursor-pointer truncate transition-all duration-200"
-                :class="isPlaylistActive(pl.id) ? 'text-content bg-muted' : 'text-content-2 hover:text-content hover:bg-subtle'">
-                {{ pl.name }}
+                class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200"
+                :class="isPlaylistActive(pl.id) ? 'bg-muted' : 'hover:bg-subtle'">
+                <img :src="pl.coverImgUrl + '?param=80y80'" class="w-8 h-8 rounded object-cover flex-shrink-0" />
+                <span class="text-sm truncate"
+                  :class="isPlaylistActive(pl.id) ? 'text-content font-medium' : 'text-content-2'">{{ pl.name }}</span>
               </div>
             </div>
           </div>
 
           <div class="mt-4 mb-1 pt-2" v-if="userStore.isLoggedIn">
-            <div class="flex items-center justify-between px-3 mb-1 cursor-pointer"
+            <div class="flex items-center justify-between px-3 mb-1 cursor-pointer group"
               @click="showSubPlaylists = !showSubPlaylists">
               <p class="text-xs text-content-3">收藏的歌单</p>
-              <span class="text-xs text-content-3 transition-transform" :class="{ 'rotate-90': showSubPlaylists }">▶</span>
+              <IconChevronRight class="w-3 h-3 text-content-3 transition-transform" :class="{ 'rotate-90': showSubPlaylists }" />
             </div>
             <div v-show="showSubPlaylists" class="space-y-0.5">
               <div v-for="pl in subPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
-                class="px-3 py-1.5 rounded-lg text-sm cursor-pointer truncate transition-all duration-200"
-                :class="isPlaylistActive(pl.id) ? 'text-content bg-muted' : 'text-content-2 hover:text-content hover:bg-subtle'">
-                {{ pl.name }}
+                class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200"
+                :class="isPlaylistActive(pl.id) ? 'bg-muted' : 'hover:bg-subtle'">
+                <img :src="pl.coverImgUrl + '?param=80y80'" class="w-8 h-8 rounded object-cover flex-shrink-0" />
+                <span class="text-sm truncate"
+                  :class="isPlaylistActive(pl.id) ? 'text-content font-medium' : 'text-content-2'">{{ pl.name }}</span>
               </div>
             </div>
           </div>
@@ -97,7 +101,7 @@
               <router-link to="/settings"
                 class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
                 active-class="!text-content !bg-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                <IconSettings class="w-[18px] h-[18px]" />
                 设置
               </router-link>
             </div>
@@ -105,7 +109,7 @@
               <p class="text-xs text-content-3 mb-2">强烈建议登录以提升体验</p>
               <router-link to="/login"
                 class="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover transition text-sm font-medium text-white">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                <IconLogIn class="w-4 h-4" />
                 立即登录
               </router-link>
             </div>
@@ -113,7 +117,7 @@
               <img :src="userStore.user?.avatarUrl" class="w-8 h-8 rounded-full ring-2 ring-accent/50" />
               <div class="min-w-0">
                 <p class="text-sm font-medium truncate">{{ userStore.user?.nickname }}</p>
-                <button @click="userStore.logout()"
+                <button @click="userStore.logout(); player.stop()"
                   class="text-xs text-content-3 hover:text-danger transition">退出登录</button>
               </div>
             </div>
@@ -134,11 +138,14 @@
     <Transition name="drawer">
       <div
         v-if="windowVisible && player.showRoamDrawer"
-        class="fixed inset-0 z-50 flex flex-col backdrop-blur-xl bg-black/80"
+        class="fixed inset-0 z-50 flex flex-col backdrop-blur-xl"
+        :class="!player.dominantColor && 'bg-surface/95'"
+        :style="player.dominantColor ? { backgroundColor: player.dominantColor } : {}"
       >
-        <div class="h-10 flex items-center justify-between px-4 flex-shrink-0" data-tauri-drag-region>
-          <button @click="player.closeRoamDrawer()" class="text-content-2 hover:text-content transition">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <div v-if="player.dominantColor" class="absolute inset-0 bg-black/60 pointer-events-none"></div>
+        <div class="h-10 flex items-center justify-between px-4 flex-shrink-0 relative z-10" data-tauri-drag-region>
+          <button @click="player.closeRoamDrawer()" :class="player.dominantColor ? 'text-white/60 hover:text-white' : 'text-content-2 hover:text-content'" class="transition">
+            <IconChevronDown class="w-5 h-5" />
           </button>
           <div class="flex items-center gap-1.5">
             <button @click="minimizeWindow" class="w-3 h-3 rounded-full bg-yellow-500 hover:bg-yellow-400 transition" title="最小化"></button>
@@ -146,7 +153,7 @@
             <button @click="closeWindow" class="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition" title="关闭"></button>
           </div>
         </div>
-        <div class="flex-1 min-h-0 flex px-8 pb-8 gap-0">
+        <div class="flex-1 min-h-0 flex px-8 pb-8 gap-0 relative z-10">
           <div class="w-2/5 flex flex-col items-center justify-center flex-shrink-0">
             <img
               v-if="roamCoverUrl && !roamCoverError"
@@ -156,18 +163,19 @@
             />
             <div
               v-else
-              class="w-72 h-72 rounded-3xl bg-white/10 flex items-center justify-center shadow-2xl mb-4"
+              class="w-72 h-72 rounded-3xl flex items-center justify-center shadow-2xl mb-4"
+              :class="player.dominantColor ? 'bg-white/10' : 'bg-muted'"
             >
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-white/30"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              <IconMusic class="w-16 h-16" :class="player.dominantColor ? 'text-white/30' : 'text-content-4'" />
             </div>
-            <h1 class="text-2xl font-bold text-white text-center">{{ roamSong?.name }}</h1>
-            <p class="text-content-2 mt-2 text-center">
+            <h1 class="text-2xl font-bold text-center" :class="player.dominantColor ? 'text-white' : 'text-content'">{{ roamSong?.name }}</h1>
+            <p class="mt-2 text-center" :class="player.dominantColor ? 'text-white/70' : 'text-content-2'">
               <template v-for="(a, i) in roamSong?.ar || []" :key="a.id || i">
-                <span v-if="i > 0" class="text-content-3">/</span>
+                <span v-if="i > 0" :class="player.dominantColor ? 'text-white/40' : 'text-content-3'">/</span>
                 <span class="hover:text-accent-text cursor-pointer transition" @click="a.id && navigateFromDrawer({ name: 'artist', params: { id: a.id } })">{{ a.name }}</span>
               </template>
               <template v-if="roamSong?.al?.name">
-                <span class="text-content-3 mx-1">·</span>
+                <span :class="player.dominantColor ? 'text-white/40' : 'text-content-3'" class="mx-1">·</span>
                 <span class="hover:text-accent-text cursor-pointer transition" @click="roamSong!.al.id && navigateFromDrawer({ name: 'album', params: { id: roamSong!.al.id } })">{{ roamSong.al.name }}</span>
               </template>
             </p>
@@ -176,18 +184,24 @@
             <div class="flex items-center gap-1 mb-3 px-4">
               <button @click="roamTab = 'lyric'"
                 class="px-3 py-1 rounded-full text-sm transition"
-                :class="roamTab === 'lyric' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80'">
+                :class="player.dominantColor
+                  ? (roamTab === 'lyric' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80')
+                  : (roamTab === 'lyric' ? 'bg-muted text-content font-medium' : 'text-content-3 hover:text-content')">
                 歌词
               </button>
               <button @click="roamTab = 'comment'"
                 class="px-3 py-1 rounded-full text-sm transition"
-                :class="roamTab === 'comment' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80'">
+                :class="player.dominantColor
+                  ? (roamTab === 'comment' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80')
+                  : (roamTab === 'comment' ? 'bg-muted text-content font-medium' : 'text-content-3 hover:text-content')">
                 评论
               </button>
               <button v-if="hasTranslation" @click="toggleTranslation"
                 class="ml-auto px-2.5 py-1 rounded-full text-xs transition flex items-center gap-1"
-                :class="showTranslation ? 'bg-white/15 text-white font-medium' : 'text-white/40 hover:text-white/70'">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+                :class="player.dominantColor
+                  ? (showTranslation ? 'bg-white/15 text-white font-medium' : 'text-white/40 hover:text-white/70')
+                  : (showTranslation ? 'bg-muted text-content font-medium' : 'text-content-4 hover:text-content-2')">
+                <IconLanguages class="w-3 h-3" />
                 译
               </button>
             </div>
@@ -207,7 +221,7 @@
                   <span v-if="showTranslation && line.translation" class="block text-sm opacity-60 mt-1">{{ line.translation }}</span>
                 </p>
               </div>
-              <div v-else class="text-content-3 text-center mt-8">暂无歌词</div>
+              <div v-else :class="player.dominantColor ? 'text-white/40' : 'text-content-3'" class="text-center mt-8">暂无歌词</div>
             </div>
             <div v-show="roamTab === 'comment'" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
               <CommentSection v-if="roamSong" :type="0" :id="player.commentSongId || roamSong.id" :key="player.commentSongId || roamSong.id" />
@@ -238,7 +252,7 @@
             <button @click="handleCloseAction('minimize')"
               class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-subtle hover:bg-muted transition text-left">
               <div class="w-9 h-9 rounded-lg bg-accent-dim flex items-center justify-center flex-shrink-0">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-accent-text"><path d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"/></svg>
+                <IconMaximize2 class="w-[18px] h-[18px] text-accent-text" />
               </div>
               <div>
                 <p class="text-sm font-medium text-content">最小化到托盘</p>
@@ -248,7 +262,7 @@
             <button @click="handleCloseAction('exit')"
               class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-subtle hover:bg-muted transition text-left">
               <div class="w-9 h-9 rounded-lg bg-danger-dim flex items-center justify-center flex-shrink-0">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-danger"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                <IconX class="w-[18px] h-[18px] text-danger" />
               </div>
               <div>
                 <p class="text-sm font-medium text-content">退出程序</p>
@@ -281,7 +295,7 @@ import ToastContainer from './components/ToastContainer.vue';
 import CommentSection from './components/CommentSection.vue';
 import UpdateDialog from './components/UpdateDialog.vue';
 import { usePlayerStore } from './stores/player';
-import { getCoverUrl } from './utils/song';
+import { getCoverUrl, extractDominantColor } from './utils/song';
 import { useOnlineStatus } from './composables/useOnlineStatus';
 import { showToast } from './composables/useToast';
 import { useLyric } from './composables/UserLyric';
@@ -289,6 +303,19 @@ import { useUpdater } from './composables/useUpdater';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
+import IconHome from '~icons/lucide/home';
+import IconSearch from '~icons/lucide/search';
+import IconRadio from '~icons/lucide/radio';
+import IconHeart from '~icons/lucide/heart';
+import IconSettings from '~icons/lucide/settings';
+import IconLogIn from '~icons/lucide/log-in';
+import IconChevronDown from '~icons/lucide/chevron-down';
+import IconChevronRight from '~icons/lucide/chevron-right';
+import IconMaximize2 from '~icons/lucide/maximize-2';
+import IconX from '~icons/lucide/x';
+import IconClock from '~icons/lucide/clock';
+import IconMusic from '~icons/lucide/music';
+import IconLanguages from '~icons/lucide/languages';
 
 const router = useRouter();
 const route = useRoute();
@@ -307,20 +334,14 @@ const createdPlaylists = ref<any[]>([]);
 const subPlaylists = ref<any[]>([]);
 const showCreatedPlaylists = ref(true);
 const showSubPlaylists = ref(true);
-const searchQuery = ref('');
 const showCloseModal = ref(false);
 const closeDontAskAgain = ref(false);
 const windowVisible = ref(true);
 const keepAliveInclude = ref<string[]>(['HomeView', 'DiscoverView', 'FavoriteSongsView', 'DailySongsView', 'LocalMusicView']);
 
-watch(() => settings.theme, (val) => {
+watch(() => settings.dataTheme, (val) => {
   document.documentElement.setAttribute('data-theme', val);
 }, { immediate: true });
-
-function doSearch() {
-  const q = searchQuery.value.trim();
-  if (q) router.push({ path: '/discover', query: { q } });
-}
 
 const { lyrics, currentLyricIdx, hasTranslation, showTranslation, toggleTranslation } = useLyric();
 const lyricScrollContainer = ref<HTMLElement | null>(null);
@@ -333,7 +354,15 @@ const roamCoverUrl = computed(() => {
   if (!roamSong.value) return '';
   return getCoverUrl(roamSong.value) || '';
 });
-watch(roamCoverUrl, () => { roamCoverError.value = false; });
+watch(roamCoverUrl, async (url) => {
+  roamCoverError.value = false;
+  if (url) {
+    const color = await extractDominantColor(url);
+    player.dominantColor = color;
+  } else {
+    player.dominantColor = '';
+  }
+});
 let roamResizeObserver: ResizeObserver | null = null;
 
 function updateRoamLyricPad() {
@@ -391,12 +420,13 @@ function scrollToRoamActiveLyric() {
 
 function getRoamLyricClass(idx: number): string {
   const diff = Math.abs(idx - currentLyricIdx.value);
+  const hasColor = !!player.dominantColor;
   if (idx === currentLyricIdx.value) {
     return 'roam-lyric-active text-accent-text font-semibold text-xl';
   }
-  if (diff === 1) return 'text-content/70 text-lg';
-  if (diff === 2) return 'text-content-2/50 text-[1rem]';
-  return 'text-content-3/35 text-[1rem]';
+  if (diff === 1) return hasColor ? 'text-white/70 text-lg' : 'text-content/70 text-lg';
+  if (diff === 2) return hasColor ? 'text-white/50 text-[1rem]' : 'text-content-2/50 text-[1rem]';
+  return hasColor ? 'text-white/35 text-[1rem]' : 'text-content-3/35 text-[1rem]';
 }
 
 function seekToRoamLyric(time: number) {
@@ -411,6 +441,10 @@ function navigateFromDrawer(routeLocation: { name: string; params: any }) {
 }
 
 async function openRoamFromSidebar() {
+  if (!userStore.isLoggedIn) {
+    router.push('/login');
+    return;
+  }
   if (player.isFmMode) {
     player.openRoamDrawer();
   } else {
@@ -425,7 +459,7 @@ async function loadPlaylists() {
     const data = JSON.parse(jsonStr);
     createdPlaylists.value = (data.playlist || []).filter((p: any) => !p.subscribed).slice(1);
     subPlaylists.value = (data.playlist || []).filter((p: any) => p.subscribed);
-  } catch (e) { /* 忽略 */ }
+  } catch { /* 忽略 */ }
 }
 
 function goPlaylist(id: number) {
@@ -450,7 +484,7 @@ onMounted(async () => {
     loadPlaylists();
     player.loadLikedIds();
   }
-  try { await invoke('stop_audio'); } catch {}
+  try { await invoke('stop_audio'); } catch { /* 忽略 */ }
   try {
     const jsonStr: string = await invoke('get_login_status');
     const data = JSON.parse(jsonStr);
@@ -462,7 +496,7 @@ onMounted(async () => {
         avatarUrl: profile.avatarUrl,
       });
     }
-  } catch {}
+  } catch { /* 忽略 */ }
 
   updater.checkForUpdate(true);
 
@@ -470,8 +504,7 @@ onMounted(async () => {
   if(settings.outputDevice) {
     try {
       await invoke('set_output_device', { device: settings.outputDevice });
-    }
-    catch{}
+    } catch { /* 忽略 */ }
   }
 });
 
@@ -542,12 +575,12 @@ async function registerGlobalShortcuts() {
   for (const [id, action] of Object.entries(globalActions)) {
     const key = settings.shortcuts[id]?.key;
     if (!key) continue;
-    try { await unregister(key); } catch {}
+    try { await unregister(key); } catch { /* 忽略 */ }
     try {
       await register(key, (event) => {
         if (event.state === 'Pressed') action();
       });
-    } catch {}
+    } catch { /* 忽略 */ }
   }
 }
 

@@ -3,7 +3,7 @@
     <div v-if="loading" class="py-8 text-center text-content-2 text-sm">加载中...</div>
 
     <div v-else-if="comments.length === 0" class="py-8 text-center">
-      <svg class="mx-auto mb-2 text-content-3" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      <IconMessageSquare class="mx-auto mb-2 text-content-3 w-10 h-10" />
       <p class="text-content-3 text-sm">暂无评论</p>
     </div>
 
@@ -26,7 +26,7 @@
             @click="likeComment(comment.commentId)"
             class="flex items-center gap-1 text-content-3 hover:text-danger transition text-xs"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            <IconHeart style="font-size: 14px" />
             <span>{{ comment.likedCount }}</span>
           </button>
         </div>
@@ -41,6 +41,8 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import IconMessageSquare from '~icons/lucide/message-square'
+import IconHeart from '~icons/lucide/heart'
 
 const props = defineProps<{
   type: number

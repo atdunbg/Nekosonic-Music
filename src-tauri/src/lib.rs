@@ -137,6 +137,8 @@ pub fn run() {
             api::logout,
 
             api::search_songs,
+            api::cloudsearch,
+            api::search_suggest,
             api::get_song_url,
             api::get_hot_search,
             api::get_playlist_detail,
@@ -145,6 +147,8 @@ pub fn run() {
             api::recommend_resource,
             api::recommend_songs,
             api::personal_fm,
+            api::personal_fm_mode,
+            api::fm_trash,
             api::scrobble,
             api::get_song_detail,
             api::get_qr_key,

@@ -5,7 +5,7 @@
         <div class="p-6 pb-4">
           <div class="flex items-center gap-3 mb-1">
             <div class="w-10 h-10 rounded-xl bg-accent/15 flex items-center justify-center flex-shrink-0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-accent-text"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <IconDownload class="w-5 h-5 text-accent-text" />
             </div>
             <div>
               <h2 class="text-lg font-semibold text-content">发现新版本</h2>
@@ -54,6 +54,7 @@
 
 <script setup lang="ts">
 import type { UpdateInfo } from '../composables/useUpdater'
+import IconDownload from '~icons/lucide/download'
 
 const props = defineProps<{
   visible: boolean

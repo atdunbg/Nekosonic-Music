@@ -47,7 +47,7 @@ async function refreshLocalIds() {
     for (const s of list) {
       localSongIds.add(s.id);
     }
-  } catch {}
+  } catch { /* 忽略 */ }
 }
 
 function ensureStoreSetup() {
