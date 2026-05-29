@@ -20,14 +20,6 @@ function loadRecentLocal(): Song[] {
   return [];
 }
 
-function loadLikedIdsFromStorage(): Set<number> {
-  try {
-    const raw = localStorage.getItem('liked_ids');
-    if (raw) return new Set(JSON.parse(raw));
-  } catch { /* 忽略 */ }
-  return new Set();
-}
-
 export const usePlayerStore = defineStore('player', () => {
   const currentSong = ref<Song | null>(null);
   const playing = ref(false);
@@ -53,7 +45,7 @@ export const usePlayerStore = defineStore('player', () => {
   const recentLocal = ref<Song[]>(loadRecentLocal());
   const MAX_RECENT = 200;
 
-  const likedIds = ref<Set<number>>(loadLikedIdsFromStorage());
+  const likedIds = ref<Set<number>>(new Set());
 
   function emitPlaybackState() {
     const song = currentSong.value;
@@ -82,7 +74,9 @@ export const usePlayerStore = defineStore('player', () => {
       const data = JSON.parse(json);
       const ids: number[] = data.ids || data.data?.ids || [];
       likedIds.value = new Set(ids);
-    } catch { /* 忽略 */ }
+    } catch (e) {
+      console.error('加载喜欢列表失败', e);
+    }
   }
 
   async function toggleLike(songId: number) {
@@ -109,10 +103,6 @@ export const usePlayerStore = defineStore('player', () => {
 
   watch(recentLocal, (val) => {
     localStorage.setItem('recent_local', JSON.stringify(val));
-  }, { deep: true });
-
-  watch(likedIds, (val) => {
-    localStorage.setItem('liked_ids', JSON.stringify([...val]));
   }, { deep: true });
 
   const isFmMode = ref(false);
@@ -171,6 +161,7 @@ export const usePlayerStore = defineStore('player', () => {
       await invoke('fm_trash', { query: { id: songId, time: 25 } });
     } catch (e) {
       console.error('fm_trash 失败', e);
+      showToast('减少推荐失败', 'error');
     }
     await nextFm();
   }
@@ -254,6 +245,7 @@ export const usePlayerStore = defineStore('player', () => {
     } catch (e) {
       console.error('FM播放失败', e);
       playing.value = false;
+      showToast('FM 播放失败', 'error');
       if (fmNextCallback) {
         fmNextCallback();
       } else {
@@ -373,6 +365,7 @@ export const usePlayerStore = defineStore('player', () => {
     } catch (e) {
       console.error('播放失败', e);
       playing.value = false;
+      showToast('播放失败，请稍后重试', 'error');
     }
   }
 
@@ -576,6 +569,7 @@ export const usePlayerStore = defineStore('player', () => {
     }
   } catch (e) {
     console.error(e);
+    showToast('FM 加载失败', 'error');
   }
   return false;
 }
@@ -600,6 +594,7 @@ async function loadFm() {
     }
   } catch (e) {
     console.error('FM加载失败', e);
+    showToast('FM 加载失败', 'error');
   }
 }
 
