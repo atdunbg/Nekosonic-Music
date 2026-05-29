@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref, watch, nextTick } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { normalizeSong, type Song } from '../utils/song';
 import { useSettingsStore } from './settings';
 import { useUserStore } from './user';
 import { showToast } from '../composables/useToast';
+import { MusicApi, AudioApi } from '../api';
 
 export type PlayMode = 'loop' | 'shuffle' | 'repeat-one';
 export type { Song };
@@ -70,7 +70,7 @@ export const usePlayerStore = defineStore('player', () => {
     const userStore = useUserStore();
     if (!userStore.isLoggedIn) return;
     try {
-      const json: string = await invoke('likelist', { uid: userStore.user!.userId });
+      const json = await MusicApi.likelist(userStore.user!.userId);
       const data = JSON.parse(json);
       const ids: number[] = data.ids || data.data?.ids || [];
       likedIds.value = new Set(ids);
@@ -83,7 +83,7 @@ export const usePlayerStore = defineStore('player', () => {
     const wasLiked = likedIds.value.has(songId);
     const newLike = !wasLiked;
     try {
-      await invoke('like_song', { query: { id: songId, like: newLike ? 'true' : 'false' } });
+      await MusicApi.likeSong(songId, newLike);
       if (newLike) {
         likedIds.value.add(songId);
       } else {
@@ -124,12 +124,10 @@ export const usePlayerStore = defineStore('player', () => {
     if (lastScrobbleId === song.id && lastScrobbleStartTime > 0) {
       const playedSec = Math.round((Date.now() - lastScrobbleStartTime) / 1000);
       if (playedSec > 5) {
-        invoke('scrobble', {
-          query: {
-            id: song.id,
-            sourceid: isFmMode.value ? String(song.id) : '',
-            time: playedSec,
-          },
+        MusicApi.scrobble({
+          id: song.id,
+          sourceid: isFmMode.value ? String(song.id) : '',
+          time: playedSec,
         }).catch(() => {});
       }
     }
@@ -158,7 +156,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function fmTrash(songId: number) {
     try {
-      await invoke('fm_trash', { query: { id: songId, time: 25 } });
+      await MusicApi.fmTrash(songId, 25);
     } catch (e) {
       console.error('fm_trash 失败', e);
       showToast('减少推荐失败', 'error');
@@ -169,13 +167,11 @@ export const usePlayerStore = defineStore('player', () => {
   async function fetchFmBatch(): Promise<Song[]> {
     const isDefault = fmMode.value === 'DEFAULT' && !fmSubMode.value;
     const jsonStr: string = isDefault
-      ? await invoke('personal_fm')
-      : await invoke('personal_fm_mode', {
-          query: {
-            mode: fmMode.value,
-            subMode: fmSubMode.value,
-            limit: 3,
-          },
+      ? await MusicApi.personalFm()
+      : await MusicApi.personalFmMode({
+          mode: fmMode.value,
+          subMode: fmSubMode.value,
+          limit: 3,
         });
     const data = JSON.parse(jsonStr);
     const raw = data.data || data;
@@ -191,7 +187,7 @@ export const usePlayerStore = defineStore('player', () => {
     reportScrobble();
     if (!song.dt || song.dt === 0) {
       try {
-        const jsonStr: string = await invoke('get_song_detail', { id: String(song.id) });
+        const jsonStr = await MusicApi.getSongDetail(String(song.id));
         const data = JSON.parse(jsonStr);
         const full = data.songs?.[0];
         if (full) {
@@ -202,7 +198,7 @@ export const usePlayerStore = defineStore('player', () => {
       } catch { /* 忽略 */ }
     }
 
-    await invoke('stop_audio');
+    await AudioApi.stopAudio();
     queue.value = [];
     currentIndex.value = -1;
     playing.value = false;
@@ -210,7 +206,7 @@ export const usePlayerStore = defineStore('player', () => {
     fmSong.value = song;
     currentSong.value = song;
     try {
-      const jsonStr: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality, fm_mode: true } });
+      const jsonStr = await MusicApi.getSongUrl({ id: Number(song.id), level: settings.audioQuality, fm_mode: true });
       const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
       if (!url) throw new Error('无播放源');
@@ -234,7 +230,7 @@ export const usePlayerStore = defineStore('player', () => {
       }
 
       fmVipSkipCount = 0;
-      await invoke('play_audio', { url });
+      await AudioApi.playAudio(url);
       await waitForAudioStart();
       playing.value = true;
       duration.value = (song.dt || 0) / 1000;
@@ -260,7 +256,7 @@ export const usePlayerStore = defineStore('player', () => {
     const idx = queue.value.findIndex(s => s.id === song.id);
     if (idx !== -1 && idx === currentIndex.value && currentSong.value?.id === song.id) {
       if (!playing.value) {
-        await invoke('resume_audio');
+        await AudioApi.resumeAudio();
         playing.value = true;
         startTick();
       }
@@ -286,7 +282,7 @@ export const usePlayerStore = defineStore('player', () => {
         && queue.value.every((s, i) => s.id === songs[i].id);
       if (sameQueue) {
         if (!playing.value) {
-          await invoke('resume_audio');
+          await AudioApi.resumeAudio();
           playing.value = true;
           startTick();
         }
@@ -324,16 +320,16 @@ export const usePlayerStore = defineStore('player', () => {
       duration.value = (song.dt || 0) / 1000;
 
       if (song.localPath) {
-        await invoke('play_local_audio', { path: song.localPath });
+        await AudioApi.playLocalAudio(song.localPath);
         await waitForAudioStart();
         playing.value = true;
-      startTick();
-      addRecent(song);
-      emitPlaybackState();
-      return;
-    }
+        startTick();
+        addRecent(song);
+        emitPlaybackState();
+        return;
+      }
 
-      const jsonStr: string = await invoke('get_song_url', { query: { id: Number(song.id), level: settings.audioQuality } });
+      const jsonStr = await MusicApi.getSongUrl({ id: Number(song.id), level: settings.audioQuality });
       const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
 
@@ -355,7 +351,7 @@ export const usePlayerStore = defineStore('player', () => {
         return;
       }
 
-      await invoke('play_audio', { url });
+      await AudioApi.playAudio(url);
       await waitForAudioStart();
       playing.value = true;
       startTick();
@@ -385,7 +381,7 @@ export const usePlayerStore = defineStore('player', () => {
         if (syncCounter >= 2) {
           syncCounter = 0;
           try {
-            const pos = await invoke<number>('get_audio_position');
+            const pos = await AudioApi.getAudioPosition();
             if (pos >= currentTime.value - 0.5) {
               currentTime.value = pos;
             }
@@ -416,17 +412,17 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function toggle() {
     if (playing.value) {
-      await invoke('pause_audio');
+      await AudioApi.pauseAudio();
       playing.value = false;
     } else {
-      await invoke('resume_audio');
+      await AudioApi.resumeAudio();
       playing.value = true;
     }
     emitPlaybackState();
   }
 
   async function stop() {
-    await invoke('stop_audio');
+    await AudioApi.stopAudio();
     playing.value = false;
     currentSong.value = null;
     currentTime.value = 0;
@@ -481,7 +477,7 @@ export const usePlayerStore = defineStore('player', () => {
     try {
       currentTime.value = time;
       if (onSeekStart) onSeekStart();
-      await invoke('seek_audio', { time });
+      await AudioApi.seekAudio(time);
       startTick();
       emitPlaybackState();
     } catch (e) {
@@ -492,7 +488,7 @@ export const usePlayerStore = defineStore('player', () => {
   async function adjustVolume(delta: number) {
     const newVol = Math.max(0, Math.min(100, volume.value + delta));
     volume.value = newVol;
-    await invoke('set_volume', { vol: newVol / 100 });
+    await AudioApi.setVolume(newVol / 100);
     emitPlaybackState();
   }
 
@@ -654,7 +650,7 @@ listen<string>('mpris-command', (event) => {
     const vol = parseFloat(cmd.slice(10));
     if (!isNaN(vol)) {
       player.volume = Math.round(vol * 100);
-      invoke('set_volume', { vol }).catch(() => {});
+      AudioApi.setVolume(vol).catch(() => {});
     }
   } else if (cmd.startsWith('Seek:')) {
     const offsetUs = parseInt(cmd.slice(5), 10);

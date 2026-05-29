@@ -258,7 +258,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useSettingsStore, qualityLabels, closeActionLabels, defaultShortcuts, themeLabels, themeColors, appearanceLabels, type CloseAction } from '../stores/settings';
 import { useToast } from '../composables/useToast';
 import { useUpdater } from '../composables/useUpdater';
-import { invoke } from '@tauri-apps/api/core';
+import { DeviceApi, DownloadApi } from '../api';
 import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -287,7 +287,7 @@ const selectedDevice = computed({
   set: (val: string) => {
     const device = val === '' ? null : val;
     settings.setOutputDevice(device);
-    invoke('set_output_device', { device }).then(() => {
+    DeviceApi.setOutputDevice(device).then(() => {
       showToast(device ? `已切换到: ${device}` : '已切换到系统默认', 'success');
     }).catch((e) => {
       console.error('切换设备失败: ', e);
@@ -298,7 +298,7 @@ const selectedDevice = computed({
 
 async function loadDevices() {
   try {
-    devices.value = await invoke<string[]>('get_output_devices');
+    devices.value = await DeviceApi.getOutputDevices();
   } catch (e) {
     console.error('获取设备失败: ', e);
   }
@@ -309,7 +309,7 @@ const defaultDownloadPath = ref('');
 onMounted(async () => {
   appVersion.value = await getVersion();
   try {
-    defaultDownloadPath.value = await invoke<string>('get_default_download_path');
+    defaultDownloadPath.value = await DownloadApi.getDefaultDownloadPath();
   } catch { /* 忽略 */ }
   loadDevices();
 });

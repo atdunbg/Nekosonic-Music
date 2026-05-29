@@ -38,7 +38,6 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { useUserStore } from './stores/user';
 import { useSettingsStore, type CloseAction } from './stores/settings';
 import { usePlayerStore } from './stores/player';
@@ -55,6 +54,7 @@ import { useUpdater } from './composables/useUpdater';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
+import { MusicApi, AudioApi, DeviceApi, AppApi } from './api';
 
 const userStore = useUserStore();
 const player = usePlayerStore();
@@ -87,9 +87,9 @@ onMounted(async () => {
   if (userStore.isLoggedIn) {
     player.loadLikedIds();
   }
-  try { await invoke('stop_audio'); } catch { /* 忽略 */ }
+  try { await AudioApi.stopAudio(); } catch { /* 忽略 */ }
   try {
-    const jsonStr: string = await invoke('get_login_status');
+    const jsonStr: string = await MusicApi.getLoginStatus();
     const data = JSON.parse(jsonStr);
     if (data.account || data.profile) {
       const profile = data.profile || data.account;
@@ -105,7 +105,7 @@ onMounted(async () => {
 
   if (settings.outputDevice) {
     try {
-      await invoke('set_output_device', { device: settings.outputDevice });
+      await DeviceApi.setOutputDevice(settings.outputDevice);
     } catch { /* 忽略 */ }
   }
 });
@@ -118,7 +118,7 @@ function closeWindow() {
   } else if (settings.closeAction === 'minimize') {
     currentWindow.hide();
   } else {
-    invoke('exit_app');
+    AppApi.exitApp();
   }
 }
 
@@ -130,7 +130,7 @@ function handleCloseAction(action: CloseAction, remember: boolean) {
   if (action === 'minimize') {
     currentWindow.hide();
   } else {
-    invoke('exit_app');
+    AppApi.exitApp();
   }
 }
 

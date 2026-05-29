@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../stores/user';
 import QRCode from 'qrcode';
@@ -52,7 +52,7 @@ async function refreshQr() {
     qrError.value = '';
     if (pollTimer) clearInterval(pollTimer);
     try {
-        qrKey = await invoke('get_qr_key');
+        qrKey = await MusicApi.getQrKey();
         if (!qrKey) {
             qrError.value = '未获取到登录密钥';
             qrLoading.value = false;
@@ -76,7 +76,7 @@ async function refreshQr() {
 function startPolling() {
     pollTimer = setInterval(async () => {
         try {
-            const jsonStr: string = await invoke('check_qr_status', { query: { key: qrKey } });
+            const jsonStr: string = await MusicApi.checkQrStatus(qrKey);
             const data = JSON.parse(jsonStr);
             const code = data.code;
             if (code === 800) {
@@ -104,7 +104,7 @@ function startPolling() {
 
 async function fetchUserProfile() {
     try {
-        const profileJson: string = await invoke('get_login_status');
+        const profileJson: string = await MusicApi.getLoginStatus();
         const profile = JSON.parse(profileJson);
         if (profile.profile) {
             userStore.setUser({

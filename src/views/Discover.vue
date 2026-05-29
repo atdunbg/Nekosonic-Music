@@ -145,7 +145,7 @@ defineOptions({ name: 'DiscoverView' });
 
 import { ref, computed, onMounted, onActivated, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import SongListItem from '../components/SongListItem.vue';
 import { normalizeSong, type Song } from '../utils/song';
@@ -231,7 +231,7 @@ function onInputChange() {
   }
   suggestTimer = setTimeout(async () => {
     try {
-      const jsonStr: string = await invoke('search_suggest', { query: { keyword: keyword.value.trim() } });
+      const jsonStr: string = await MusicApi.searchSuggest(keyword.value.trim());
       const data = JSON.parse(jsonStr);
       const all = data.result?.allMatch || [];
       suggestions.value = all.map((m: any) => m.keyword).slice(0, 8);
@@ -254,7 +254,7 @@ async function loadHotTags() {
     hotTags.value = cached;
   } else {
     try {
-      const json = await invoke('get_hot_search');
+      const json = await MusicApi.getHotSearch();
       const data = JSON.parse(json as string);
       hotTags.value = (data.data || []).slice(0, 12);
       pageCacheSet('discover_hotTags', hotTags.value);
@@ -317,8 +317,8 @@ async function fetchTabResults(type: number) {
   loading.value = true;
   cacheError.value = false;
   try {
-    const jsonStr: string = await invoke('cloudsearch', {
-      query: { keyword: lastSearchKeyword.value, searchType: type, limit: 30 }
+    const jsonStr: string = await MusicApi.cloudsearch({
+      keyword: lastSearchKeyword.value, searchType: type, limit: 30
     });
     const data = JSON.parse(jsonStr);
     const result = data.result || {};

@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onActivated, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import SongListItem from '../components/SongListItem.vue';
 import { usePlayerStore } from '../stores/player';
 import { useUserStore } from '../stores/user';
@@ -71,7 +71,7 @@ async function loadData() {
   }
   loading.value = true;
   try {
-    const playlistJson: string = await invoke('user_playlist', { uid: userStore.user!.userId });
+    const playlistJson: string = await MusicApi.userPlaylist(userStore.user!.userId);
     const playlistData = JSON.parse(playlistJson);
     const created = (playlistData.playlist || []).filter((p: any) => !p.subscribed);
     if (created.length === 0) {
@@ -79,7 +79,7 @@ async function loadData() {
       return;
     }
     const likePlaylistId = created[0].id;
-    const trackJson: string = await invoke('playlist_track_all', { query: { id: likePlaylistId } });
+    const trackJson: string = await MusicApi.playlistTrackAll(likePlaylistId);
     const trackData = JSON.parse(trackJson);
     songs.value = (trackData.songs || []).map(normalizeSong);
     pageCacheSet('favoriteSongs', songs.value);

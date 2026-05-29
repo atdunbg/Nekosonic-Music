@@ -36,7 +36,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onActivated, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import SongListItem from '../components/SongListItem.vue';
 import { usePlayerStore } from '../stores/player';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
@@ -63,7 +63,7 @@ async function loadData() {
   }
   loading.value = true;
   try {
-    const jsonStr: string = await invoke('recommend_songs');
+    const jsonStr: string = await MusicApi.recommendSongs();
     const data = JSON.parse(jsonStr);
     songs.value = (data.data?.dailySongs || []).map(normalizeSong);
     pageCacheSet('dailySongs', songs.value);

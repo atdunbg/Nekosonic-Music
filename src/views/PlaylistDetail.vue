@@ -68,7 +68,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import { useUserStore } from '../stores/user';
 import { showToast } from '../composables/useToast';
@@ -98,7 +98,7 @@ async function fetchPlaylist(id: number) {
   playlist.value = null;
   songs.value = [];
   try {
-    const jsonStr: string = await invoke('get_playlist_detail', { id });
+    const jsonStr: string = await MusicApi.getPlaylistDetail(id);
     const data = JSON.parse(jsonStr);
     playlist.value = data.playlist;
     songs.value = (data.playlist.tracks || []).map(normalizeSong);
@@ -128,7 +128,7 @@ async function toggleSubscribe() {
   if (!playlist.value) return;
   const newSubscribed = !subscribed.value;
   try {
-    await invoke('playlist_subscribe', { query: { id: Number(playlist.value.id), subscribe: newSubscribed } });
+    await MusicApi.playlistSubscribe(Number(playlist.value.id), newSubscribed);
     subscribed.value = newSubscribed;
     showToast(subscribed.value ? '已收藏歌单' : '已取消收藏', 'success');
   } catch {

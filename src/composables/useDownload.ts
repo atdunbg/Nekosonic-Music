@@ -1,9 +1,9 @@
 import { reactive, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useSettingsStore } from '../stores/settings';
 import { showToast } from '../composables/useToast';
 import { getCoverUrl, type Song } from '../utils/song';
+import { DownloadApi } from '../api';
 
 interface DownloadTask {
   id: number;
@@ -42,7 +42,7 @@ async function setupDownloadListener() {
 async function refreshLocalIds() {
   try {
     const settings = useSettingsStore();
-    const list: { id: number }[] = await invoke('list_local_songs', { downloadPath: settings.downloadPath || null });
+    const list: { id: number }[] = await DownloadApi.listLocalSongs(settings.downloadPath || null);
     localSongIds.clear();
     for (const s of list) {
       localSongIds.add(s.id);
@@ -90,17 +90,15 @@ async function downloadSong(song: Song) {
   tasks.push({ id: song.id, name: song.name, progress: 0 });
 
   try {
-    await invoke('download_song', {
-      query: {
-        id: song.id,
-        name: song.name,
-        artist,
-        album: albumName,
-        duration: durationVal,
-        coverUrl,
-        level: settings.audioQuality,
-        downloadPath: settings.downloadPath || null,
-      },
+    await DownloadApi.downloadSong({
+      id: song.id,
+      name: song.name,
+      artist,
+      album: albumName,
+      duration: durationVal,
+      coverUrl,
+      level: settings.audioQuality,
+      downloadPath: settings.downloadPath || null,
     });
     localSongIds.add(song.id);
   } catch (e: any) {

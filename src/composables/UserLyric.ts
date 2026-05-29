@@ -1,7 +1,7 @@
 import { ref, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { parseLrc, mergeTranslation, getCurrentLyricIndex, LyricLine } from '../utils/lyric';
 import { usePlayerStore } from '../stores/player';
+import { MusicApi } from '../api';
 
 export function useLyric() {
   const player = usePlayerStore();
@@ -19,7 +19,7 @@ export function useLyric() {
       return;
     }
     try {
-      const jsonStr: string = await invoke('get_lyric', { id: song.id });
+      const jsonStr: string = await MusicApi.getLyric(song.id);
       const data = JSON.parse(jsonStr);
       const lrc = data?.lrc?.lyric || '';
       const tLrc = data?.tlyric?.lyric || '';

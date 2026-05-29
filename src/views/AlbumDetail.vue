@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import { normalizeSong, type Song } from '../utils/song';
 import { formatDate } from '../utils/format';
@@ -79,7 +79,7 @@ async function fetchAlbum(id: number) {
   album.value = null;
   songs.value = [];
   try {
-    const jsonStr: string = await invoke('album_detail', { id });
+    const jsonStr: string = await MusicApi.albumDetail(id);
     const data = JSON.parse(jsonStr);
     album.value = data.album;
     songs.value = (data.songs || []).map(normalizeSong);

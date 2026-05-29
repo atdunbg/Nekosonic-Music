@@ -76,7 +76,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated, onBeforeUnmount, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi, DownloadApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
 import { useSettingsStore } from '../stores/settings';
@@ -129,7 +129,7 @@ async function refresh() {
   loading.value = true;
   pageCacheInvalidate('localMusic');
   try {
-    const list = await invoke<LocalSong[]>('list_local_songs', { downloadPath: settings.downloadPath || null });
+    const list = await DownloadApi.listLocalSongs(settings.downloadPath || null);
     songs.value = list;
     pageCacheSet('localMusic', list);
     fetchMissingCovers();
@@ -145,7 +145,7 @@ async function fetchMissingCovers() {
   if (missing.length === 0) return;
   const ids = [...new Set(missing.map(s => s.id))];
   try {
-    const jsonStr: string = await invoke('get_song_detail', { id: JSON.stringify(ids) });
+    const jsonStr: string = await MusicApi.getSongDetail(JSON.stringify(ids));
     const data = JSON.parse(jsonStr);
     const detailMap = new Map<number, string>();
     for (const s of data.songs || []) {
@@ -194,7 +194,7 @@ function confirmDelete(song: LocalSong) {
 async function doDelete() {
   if (!deleteTarget.value) return;
   try {
-    await invoke('delete_local_song', { query: { id: deleteTarget.value.id, filename: deleteTarget.value.filename, downloadPath: settings.downloadPath || null } });
+    await DownloadApi.deleteLocalSong({ id: deleteTarget.value.id, filename: deleteTarget.value.filename, downloadPath: settings.downloadPath || null });
     songs.value = songs.value.filter(s => s.id !== deleteTarget.value!.id);
     download.localSongIds.delete(deleteTarget.value.id);
     showToast('已删除', 'success');

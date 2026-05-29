@@ -42,7 +42,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { MusicApi } from '../api'
 import IconMessageSquare from '~icons/lucide/message-square'
 import IconHeart from '~icons/lucide/heart'
 
@@ -77,13 +77,11 @@ async function fetchComments(reset = false) {
   }
 
   try {
-    const jsonStr: string = await invoke('comment_hot', {
-      query: {
-        type: props.type,
-        id: props.id,
-        limit: pageSize,
-        offset: (pageNo.value - 1) * pageSize
-      }
+    const jsonStr: string = await MusicApi.commentHot({
+      type: props.type,
+      id: props.id,
+      limit: pageSize,
+      offset: (pageNo.value - 1) * pageSize
     })
     const data = JSON.parse(jsonStr)
     const list = data.hotComments || []
@@ -116,13 +114,11 @@ async function likeComment(cid: number) {
   const liked = !!target.liked
   likingSet.value.add(cid)
   try {
-    await invoke('comment_like', {
-      query: {
-        t: liked ? 0 : 1,
-        type: props.type,
-        id: props.id,
-        cid
-      }
+    await MusicApi.commentLike({
+      t: liked ? 0 : 1,
+      type: props.type,
+      id: props.id,
+      cid
     })
     target.liked = !liked
     target.likedCount += liked ? -1 : 1

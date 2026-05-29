@@ -83,7 +83,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import { formatPlayCount, formatDate } from '../utils/format';
 import { normalizeSong, type Song } from '../utils/song';
@@ -115,10 +115,10 @@ async function fetchArtist(id: number) {
   briefDesc.value = '';
   try {
     const [detailStr, songsStr, albumStr, descStr] = await Promise.all([
-      invoke('artist_detail', { id }) as Promise<string>,
-      invoke('artist_songs', { query: { id, order: 'hot', limit: 50, offset: 0 } }) as Promise<string>,
-      invoke('artist_album', { id, limit: 30, offset: 0 }) as Promise<string>,
-      invoke('artist_desc', { id }) as Promise<string>,
+      MusicApi.artistDetail(id),
+      MusicApi.artistSongs({ id, order: 'hot', limit: 50, offset: 0 }),
+      MusicApi.artistAlbum(id, 30, 0),
+      MusicApi.artistDesc(id),
     ]);
     const detailData = JSON.parse(detailStr);
     artist.value = detailData.artist;

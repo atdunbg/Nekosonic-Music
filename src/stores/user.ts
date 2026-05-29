@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 
 export interface UserProfile {
   userId: number;
@@ -21,7 +21,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function logout() {
-    try { await invoke('logout'); } catch { /* 忽略 */ }
+    try { await MusicApi.logout(); } catch { /* 忽略 */ }
     user.value = null;
     isLoggedIn.value = false;
     localStorage.removeItem('user_profile');

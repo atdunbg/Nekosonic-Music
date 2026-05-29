@@ -216,7 +216,7 @@ import { usePlayerStore, PlayMode } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
 import { getCoverUrl } from '../utils/song';
-import { invoke } from '@tauri-apps/api/core';
+import { AudioApi } from '../api';
 import { showToast } from '../composables/useToast';
 import { listen } from '@tauri-apps/api/event';
 import { useRouter } from 'vue-router';
@@ -292,7 +292,7 @@ function toggleMute() {
   } else {
     player.volume = prevVolume.value || 100;
   }
-  invoke('set_volume', { vol: player.volume / 100 });
+  AudioApi.setVolume(player.volume / 100);
 }
 
 let onDocMove: ((e: MouseEvent) => void) | null = null;
@@ -418,7 +418,7 @@ async function handleVolumeChange(e: Event) {
   const target = e.target as HTMLInputElement;
   const val = parseInt(target.value, 10);
   player.volume = val;
-  await invoke('set_volume', { vol: val / 100 });
+  await AudioApi.setVolume(val / 100);
 }
 
 const volumeBarBg = computed(() => {

@@ -116,9 +116,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
 import { useUserStore } from '../stores/user';
 import { usePlayerStore } from '../stores/player';
+import { MusicApi } from '../api';
 import IconHome from '~icons/lucide/home';
 import IconSearch from '~icons/lucide/search';
 import IconRadio from '~icons/lucide/radio';
@@ -142,7 +142,7 @@ const showSubPlaylists = ref(true);
 async function loadPlaylists() {
   if (!userStore.isLoggedIn || !userStore.user) return;
   try {
-    const jsonStr: string = await invoke('user_playlist', { uid: userStore.user.userId });
+    const jsonStr: string = await MusicApi.userPlaylist(userStore.user.userId);
     const data = JSON.parse(jsonStr);
     createdPlaylists.value = (data.playlist || []).filter((p: any) => !p.subscribed).slice(1);
     subPlaylists.value = (data.playlist || []).filter((p: any) => p.subscribed);

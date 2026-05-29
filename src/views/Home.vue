@@ -104,7 +104,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
+import { MusicApi } from '../api';
 import { useUserStore } from '../stores/user';
 import { usePlayerStore } from '../stores/player';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
@@ -169,7 +169,7 @@ async function loadData() {
   }
 
   const results = await Promise.allSettled(
-    RANK_IDS.map(id => invoke('get_playlist_detail', { id }))
+    RANK_IDS.map(id => MusicApi.getPlaylistDetail(id))
   );
   rankPlaylists.value = results
     .filter(r => r.status === 'fulfilled')
@@ -181,7 +181,7 @@ async function loadData() {
 
   if (userStore.isLoggedIn) {
     try {
-      const json = await invoke('recommend_resource');
+      const json = await MusicApi.recommendResource();
       const data = JSON.parse(json as string);
       recPlaylists.value = data.recommend || [];
     } catch { /* 忽略 */ }
