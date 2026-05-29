@@ -1,6 +1,6 @@
 <template>
   <div
-    class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur border-t border-line z-50 select-none"
+    class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur z-50 select-none"
   >
     <div v-if="player.dominantColor"
       class="absolute inset-0 pointer-events-none transition-opacity duration-300"
@@ -57,7 +57,7 @@
       </div>
 
       <div class="flex-1 flex flex-col items-center justify-center gap-1">
-        <div class="flex items-center gap-5">
+        <div class="flex items-center gap-5 relative">
           <button @click="player.prev()" :disabled="player.isFmMode" :class="[
             'transition',
             player.isFmMode ? (drawerActive ? 'text-white/20 cursor-not-allowed' : 'text-content-4 cursor-not-allowed') : (drawerActive ? 'text-white/70 hover:text-white' : 'text-content-2 hover:text-content'),
@@ -73,7 +73,7 @@
           <button @click="player.next()" :class="drawerActive ? 'text-white/70 hover:text-white transition' : 'text-content-2 hover:text-content transition'">
             <IconSkipForward class="w-5 h-5" />
           </button>
-          <button v-if="player.isFmMode && player.currentSong" @click="showDislikeModal = true" :class="drawerActive ? 'text-white/50 hover:text-danger transition' : 'text-content-3 hover:text-danger transition'" title="减少推荐">
+          <button v-if="player.isFmMode && player.currentSong" @click="showDislikeModal = true" class="absolute left-full ml-5" :class="drawerActive ? 'text-white/50 hover:text-danger transition' : 'text-content-3 hover:text-danger transition'" title="减少推荐">
             <IconHeartOff class="w-[18px] h-[18px]" />
           </button>
         </div>
