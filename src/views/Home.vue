@@ -71,15 +71,37 @@
     </div>
 
     <!-- 第二行：为你推荐（需登录） -->
-    <div v-if="userStore.isLoggedIn && recPlaylists.length" class="mb-10">
+    <div v-if="userStore.isLoggedIn" class="mb-10">
       <h2 class="text-xl font-semibold mb-4">🎯 为你推荐</h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+
+      <!-- 加载中：骨架屏 -->
+      <div v-if="recLoading && !recPlaylists.length" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+        <div v-for="i in 6" :key="'skel-'+i" class="bg-subtle rounded-xl overflow-hidden max-w-[220px] justify-self-center w-full animate-pulse">
+          <div class="w-full aspect-square bg-muted"></div>
+          <div class="p-3 space-y-2">
+            <div class="h-4 bg-muted rounded w-3/4"></div>
+            <div class="h-3 bg-muted rounded w-1/2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 加载失败 -->
+      <div v-else-if="recError && !recPlaylists.length" class="flex flex-col items-center justify-center py-12 gap-3">
+        <p class="text-content-2 text-sm">推荐加载失败</p>
+        <button @click="fetchRecPlaylists"
+          class="px-4 py-2 bg-subtle hover:bg-muted rounded-lg text-sm transition">
+          重试
+        </button>
+      </div>
+
+      <!-- 正常内容 -->
+      <div v-else-if="recPlaylists.length" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
         <div v-for="pl in recPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
           class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer max-w-[220px] justify-self-center w-full">
           <img :src="pl.picUrl" class="w-full aspect-square object-cover" />
           <div class="p-3">
             <p class="text-sm font-medium truncate">{{ pl.name }}</p>
-            <p class="text-xs text-content-2 mt-1">{{ pl.copywriter || '' }}</p>
+            <p class="text-xs text-content-2 mt-1 truncate">{{ pl.copywriter || pl.description || '' }}</p>
           </div>
         </div>
       </div>
@@ -88,12 +110,34 @@
     <!-- 第三行：热门歌单（排行榜） -->
     <div>
       <h2 class="text-xl font-semibold mb-4">📈 热门歌单</h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+
+      <!-- 加载中：骨架屏 -->
+      <div v-if="rankLoading && !rankPlaylists.length" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+        <div v-for="i in 4" :key="'rskel-'+i" class="bg-subtle rounded-xl overflow-hidden max-w-[220px] justify-self-center w-full animate-pulse">
+          <div class="w-full aspect-square bg-muted"></div>
+          <div class="p-3 space-y-2">
+            <div class="h-4 bg-muted rounded w-3/4"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 加载失败 -->
+      <div v-else-if="rankError && !rankPlaylists.length" class="flex flex-col items-center justify-center py-12 gap-3">
+        <p class="text-content-2 text-sm">热门歌单加载失败</p>
+        <button @click="fetchRankPlaylists"
+          class="px-4 py-2 bg-subtle hover:bg-muted rounded-lg text-sm transition">
+          重试
+        </button>
+      </div>
+
+      <!-- 正常内容 -->
+      <div v-else-if="rankPlaylists.length" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
         <div v-for="pl in rankPlaylists" :key="pl.id" @click="goPlaylist(pl.id)"
           class="bg-subtle rounded-xl overflow-hidden hover:bg-muted transition cursor-pointer backdrop-blur-sm max-w-[220px] justify-self-center w-full">
           <img :src="pl.coverImgUrl" class="w-full aspect-square object-cover" />
           <div class="p-3">
             <p class="text-sm font-medium truncate">{{ pl.name }}</p>
+            <p v-if="pl.description || pl.copywriter" class="text-xs text-content-2 mt-1 truncate">{{ pl.description || pl.copywriter }}</p>
           </div>
         </div>
       </div>
@@ -119,7 +163,11 @@ const userStore = useUserStore();
 const { isOnline } = useOnlineStatus();
 
 const rankPlaylists = ref<any[]>([]);
+const rankLoading = ref(false);
+const rankError = ref(false);
 const recPlaylists = ref<any[]>([]);
+const recLoading = ref(false);
+const recError = ref(false);
 const todayStr = ref('');
 const RANK_IDS = [3778678, 3779629, 19723756, 2884035];
 
@@ -160,6 +208,56 @@ function onFmCardClick() {
   player.openRoamDrawer();
 }
 
+async function fetchRankPlaylists() {
+  const cacheKey = 'home_rank';
+  const cached = pageCacheGet(cacheKey);
+  if (cached) {
+    rankPlaylists.value = cached;
+    return;
+  }
+  rankLoading.value = true;
+  rankError.value = false;
+  try {
+    const results = await Promise.allSettled(
+      RANK_IDS.map(id => MusicApi.getPlaylistDetail(id))
+    );
+    rankPlaylists.value = results
+      .filter(r => r.status === 'fulfilled')
+      .map((r: any) => {
+        const data = JSON.parse(r.value);
+        return data.playlist;
+      })
+      .filter(Boolean);
+    pageCacheSet(cacheKey, rankPlaylists.value);
+  } catch {
+    rankError.value = true;
+  } finally {
+    rankLoading.value = false;
+  }
+}
+
+async function fetchRecPlaylists() {
+  if (!userStore.isLoggedIn) return;
+  const cacheKey = 'home_rec';
+  const cached = pageCacheGet(cacheKey);
+  if (cached) {
+    recPlaylists.value = cached;
+    return;
+  }
+  recLoading.value = true;
+  recError.value = false;
+  try {
+    const json = await MusicApi.recommendResource();
+    const data = JSON.parse(json as string);
+    recPlaylists.value = data.recommend || [];
+    pageCacheSet(cacheKey, recPlaylists.value);
+  } catch {
+    recError.value = true;
+  } finally {
+    recLoading.value = false;
+  }
+}
+
 async function loadData() {
   const cached = pageCacheGet('home');
   if (cached) {
@@ -168,26 +266,8 @@ async function loadData() {
     return;
   }
 
-  const results = await Promise.allSettled(
-    RANK_IDS.map(id => MusicApi.getPlaylistDetail(id))
-  );
-  rankPlaylists.value = results
-    .filter(r => r.status === 'fulfilled')
-    .map((r: any) => {
-      const data = JSON.parse(r.value);
-      return data.playlist;
-    })
-    .filter(Boolean);
-
-  if (userStore.isLoggedIn) {
-    try {
-      const json = await MusicApi.recommendResource();
-      const data = JSON.parse(json as string);
-      recPlaylists.value = data.recommend || [];
-    } catch { /* 忽略 */ }
-  }
-
-  pageCacheSet('home', { rankPlaylists: rankPlaylists.value, recPlaylists: recPlaylists.value });
+  fetchRankPlaylists();
+  fetchRecPlaylists();
 }
 
 onMounted(async () => {
@@ -201,9 +281,22 @@ onActivated(() => {
 });
 
 watch(isOnline, (val, old) => {
-  if (val && !old && rankPlaylists.value.length === 0 && recPlaylists.value.length === 0) {
-    pageCacheInvalidate('home');
-    loadData();
+  if (val && !old) {
+    if (rankPlaylists.value.length === 0 && recPlaylists.value.length === 0) {
+      pageCacheInvalidate('home');
+      pageCacheInvalidate('home_rank');
+      pageCacheInvalidate('home_rec');
+      loadData();
+    } else {
+      if (rankError.value) {
+        pageCacheInvalidate('home_rank');
+        fetchRankPlaylists();
+      }
+      if (recError.value) {
+        pageCacheInvalidate('home_rec');
+        fetchRecPlaylists();
+      }
+    }
   }
 });
 

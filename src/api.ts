@@ -93,6 +93,14 @@ export namespace MusicApi {
     return invoke('artist_desc', { id });
   }
 
+  export async function artistSub(id: number, sub: boolean): Promise<string> {
+    return invoke('artist_sub', { query: { id, sub } });
+  }
+
+  export async function artistSublist(limit = 100, offset = 0): Promise<string> {
+    return invoke('artist_sublist', { query: { limit, offset } });
+  }
+
   export async function commentHot(query: { type: number; id: number; limit: number; offset: number }): Promise<string> {
     return invoke('comment_hot', { query });
   }
@@ -115,6 +123,19 @@ export namespace MusicApi {
 
   export async function scrobble(query: { id: number; sourceid: string; time: number }): Promise<void> {
     return invoke('scrobble', { query });
+  }
+
+  // 云盘
+  export async function userCloud(limit = 30, offset = 0): Promise<string> {
+    return invoke('user_cloud', { limit, offset });
+  }
+
+  export async function userCloudDel(id: number): Promise<string> {
+    return invoke('user_cloud_del', { id });
+  }
+
+  export async function cloudUpload(filePath: string): Promise<string> {
+    return invoke('cloud_upload', { filePath });
   }
 }
 
@@ -150,6 +171,10 @@ export namespace AudioApi {
   export async function getAudioPosition(): Promise<number> {
     return invoke('get_audio_position');
   }
+
+  export async function isAudioPlaying(): Promise<boolean> {
+    return invoke('is_audio_playing');
+  }
 }
 
 export namespace DeviceApi {
@@ -178,6 +203,10 @@ export namespace DownloadApi {
 
   export async function listLocalSongs(downloadPath: string | null): Promise<any[]> {
     return invoke('list_local_songs', { downloadPath });
+  }
+
+  export async function scanLocalFolders(paths: string[]): Promise<any[]> {
+    return invoke('scan_local_folders', { paths });
   }
 
   export async function deleteLocalSong(query: { id: number; filename: string; downloadPath: string | null }): Promise<void> {

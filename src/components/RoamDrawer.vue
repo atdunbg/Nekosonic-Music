@@ -43,18 +43,18 @@
         </div>
         <div class="w-3/5 relative min-h-0 overflow-hidden flex flex-col">
           <div class="flex items-center gap-1 mb-3 px-4">
-            <button @click="roamTab = 'lyric'"
+            <button @click="player.roamTab = 'lyric'"
               class="px-3 py-1 rounded-full text-sm transition"
               :class="player.dominantColor
-                ? (roamTab === 'lyric' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80')
-                : (roamTab === 'lyric' ? 'bg-muted text-content font-medium' : 'text-content-3 hover:text-content')">
+                ? (player.roamTab === 'lyric' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80')
+                : (player.roamTab === 'lyric' ? 'bg-muted text-content font-medium' : 'text-content-3 hover:text-content')">
               歌词
             </button>
-            <button @click="roamTab = 'comment'"
+            <button @click="player.roamTab = 'comment'"
               class="px-3 py-1 rounded-full text-sm transition"
               :class="player.dominantColor
-                ? (roamTab === 'comment' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80')
-                : (roamTab === 'comment' ? 'bg-muted text-content font-medium' : 'text-content-3 hover:text-content')">
+                ? (player.roamTab === 'comment' ? 'bg-white/15 text-white font-medium' : 'text-white/50 hover:text-white/80')
+                : (player.roamTab === 'comment' ? 'bg-muted text-content font-medium' : 'text-content-3 hover:text-content')">
               评论
             </button>
             <button v-if="hasTranslation" @click="toggleTranslation"
@@ -66,7 +66,7 @@
               译
             </button>
           </div>
-          <div v-show="roamTab === 'lyric'" ref="lyricScrollContainer" class="flex-1 min-h-0 overflow-y-auto custom-scroll px-4">
+          <div v-show="player.roamTab === 'lyric'" ref="lyricScrollContainer" class="flex-1 min-h-0 overflow-y-auto custom-scroll px-4">
             <div v-if="lyrics.length > 0" class="w-full max-w-lg mx-auto text-center"
               :style="{ paddingTop: roamLyricPadPx + 'px', paddingBottom: roamLyricPadPx + 'px' }">
               <p
@@ -84,7 +84,7 @@
             </div>
             <div v-else :class="player.dominantColor ? 'text-white/40' : 'text-content-3'" class="text-center mt-8">暂无歌词</div>
           </div>
-          <div v-show="roamTab === 'comment'" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+          <div v-show="player.roamTab === 'comment'" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
             <CommentSection v-if="roamSong" :type="0" :id="player.commentSongId || roamSong.id" :key="player.commentSongId || roamSong.id" :dark-mode="!!player.dominantColor" />
           </div>
         </div>
@@ -118,7 +118,6 @@ const roamLyricHovering = ref(false);
 const roamLyricPadPx = ref(0);
 const roamSong = computed(() => player.currentSong);
 const roamCoverError = ref(false);
-const roamTab = ref<'lyric' | 'comment'>('lyric');
 const roamCoverUrl = computed(() => {
   if (!roamSong.value) return '';
   return getCoverUrl(roamSong.value) || '';
@@ -144,7 +143,6 @@ function updateRoamLyricPad() {
 
 watch(() => player.showRoamDrawer, (val) => {
   if (val) {
-    roamTab.value = player.roamInitialTab;
     nextTick(() => {
       updateRoamLyricPad();
       if (roamResizeObserver) roamResizeObserver.disconnect();

@@ -7,7 +7,7 @@
 
       <main class="flex-1 overflow-y-auto pb-24">
         <router-view v-slot="{ Component }">
-          <keep-alive :max="5" :include="keepAliveInclude">
+          <keep-alive :max="10" :include="keepAliveInclude">
             <component :is="Component" />
           </keep-alive>
         </router-view>
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute } from 'vue-router';
 import { useUserStore } from './stores/user';
 import { useSettingsStore, type CloseAction } from './stores/settings';
 import { usePlayerStore } from './stores/player';
@@ -69,7 +70,60 @@ watch(isOnline, (val, old) => {
 
 const showCloseModal = ref(false);
 const windowVisible = ref(true);
-const keepAliveInclude = ref<string[]>(['HomeView', 'DiscoverView', 'FavoriteSongsView', 'DailySongsView', 'LocalMusicView']);
+
+// --- Keep-alive 缓存管理 ---
+// 规则：30秒未访问的页面自动清除缓存；多级跳转时保留导航链上的页面；FavoriteSongs 常驻
+const route = useRoute();
+
+const ROUTE_COMPONENT: Record<string, string> = {
+  home: 'HomeView', discover: 'DiscoverView', search: 'DiscoverView',
+  favorites: 'FavoriteSongsView', daily: 'DailySongsView',
+  'local-music': 'LocalMusicView', 'downloaded-music': 'DownloadedMusicView',
+  'cloud-music': 'CloudMusicView',
+  playlist: 'PlaylistDetailView', artist: 'ArtistDetailView', album: 'AlbumDetailView',
+};
+const ALL_CACHEABLE = [...new Set(Object.values(ROUTE_COMPONENT))];
+const PERMANENT = new Set(['FavoriteSongsView']);
+const CACHE_TTL = 30_000;
+
+const lastActivatedAt: Record<string, number> = {};
+const navStack = ref<string[]>([]);
+const currentComp = ref('');
+for (const name of ALL_CACHEABLE) lastActivatedAt[name] = Date.now();
+
+watch(() => route.name, (newName, oldName) => {
+  // 离开旧页面时刷新其计时（30s 从离开时算起）
+  const oldComp = ROUTE_COMPONENT[oldName as string];
+  if (oldComp) lastActivatedAt[oldComp] = Date.now();
+
+  const comp = ROUTE_COMPONENT[newName as string];
+  if (!comp) return;
+  currentComp.value = comp;
+  lastActivatedAt[comp] = Date.now();
+  const idx = navStack.value.indexOf(comp);
+  if (idx !== -1) {
+    // 返回：截断到该位置
+    navStack.value = navStack.value.slice(0, idx + 1);
+  } else {
+    navStack.value.push(comp);
+  }
+}, { immediate: true });
+
+function computeInclude(): string[] {
+  const now = Date.now();
+  const include = new Set<string>(PERMANENT);
+  if (currentComp.value) include.add(currentComp.value);
+  for (const name of navStack.value) include.add(name);
+  for (const name of ALL_CACHEABLE) {
+    if (lastActivatedAt[name] && now - lastActivatedAt[name] < CACHE_TTL) include.add(name);
+  }
+  return [...include];
+}
+
+const keepAliveInclude = ref<string[]>(computeInclude());
+let cleanupTimer: ReturnType<typeof setInterval>;
+function startCleanup() { cleanupTimer = setInterval(() => { keepAliveInclude.value = computeInclude(); }, 10_000); }
+function stopCleanup() { clearInterval(cleanupTimer); }
 
 watch(() => settings.dataTheme, (val) => {
   document.documentElement.setAttribute('data-theme', val);
@@ -81,32 +135,32 @@ watch(() => userStore.isLoggedIn, (val) => {
   }
 });
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener('contextmenu', (e) => e.preventDefault());
+  startCleanup();
+
+  AudioApi.stopAudio().catch(() => {});
 
   if (userStore.isLoggedIn) {
     player.loadLikedIds();
+    MusicApi.getLoginStatus().then(jsonStr => {
+      if (!jsonStr) return;
+      const data = JSON.parse(jsonStr);
+      if (data.account || data.profile) {
+        const profile = data.profile || data.account;
+        userStore.setUser({
+          userId: profile.userId,
+          nickname: profile.nickname,
+          avatarUrl: profile.avatarUrl,
+        });
+      }
+    }).catch(() => {});
   }
-  try { await AudioApi.stopAudio(); } catch { /* 忽略 */ }
-  try {
-    const jsonStr: string = await MusicApi.getLoginStatus();
-    const data = JSON.parse(jsonStr);
-    if (data.account || data.profile) {
-      const profile = data.profile || data.account;
-      userStore.setUser({
-        userId: profile.userId,
-        nickname: profile.nickname,
-        avatarUrl: profile.avatarUrl,
-      });
-    }
-  } catch { /* 忽略 */ }
 
   updater.checkForUpdate(true);
 
   if (settings.outputDevice) {
-    try {
-      await DeviceApi.setOutputDevice(settings.outputDevice);
-    } catch { /* 忽略 */ }
+    DeviceApi.setOutputDevice(settings.outputDevice).catch(() => {});
   }
 });
 
@@ -147,10 +201,12 @@ onMounted(() => {
   const unlisten4 = listen('window-hidden', () => {
     windowVisible.value = false;
     keepAliveInclude.value = [];
+    stopCleanup();
   });
   const unlisten5 = listen('window-shown', () => {
     windowVisible.value = true;
-    keepAliveInclude.value = ['HomeView', 'DiscoverView', 'FavoriteSongsView', 'DailySongsView', 'LocalMusicView'];
+    keepAliveInclude.value = computeInclude();
+    startCleanup();
   });
 
   onBeforeUnmount(() => {
@@ -159,6 +215,7 @@ onMounted(() => {
     unlisten3.then(fn => fn());
     unlisten4.then(fn => fn());
     unlisten5.then(fn => fn());
+    stopCleanup();
   });
 });
 

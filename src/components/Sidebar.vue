@@ -45,6 +45,18 @@
               <IconMusic class="w-[18px] h-[18px]" />
               本地音乐
             </router-link>
+            <router-link to="/downloaded-music"
+              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
+              active-class="!text-content !bg-muted">
+              <IconDownload class="w-[18px] h-[18px]" />
+              下载音乐
+            </router-link>
+            <router-link v-if="userStore.isLoggedIn" to="/cloud-music"
+              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-content-2 hover:text-content hover:bg-subtle"
+              active-class="!text-content !bg-muted">
+              <IconCloud class="w-[18px] h-[18px]" />
+              音乐云盘
+            </router-link>
           </div>
         </div>
 
@@ -128,6 +140,8 @@ import IconLogIn from '~icons/lucide/log-in';
 import IconChevronRight from '~icons/lucide/chevron-right';
 import IconClock from '~icons/lucide/clock';
 import IconMusic from '~icons/lucide/music';
+import IconCloud from '~icons/lucide/cloud';
+import IconDownload from '~icons/lucide/download';
 
 const router = useRouter();
 const route = useRoute();

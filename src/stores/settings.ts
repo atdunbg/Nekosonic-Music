@@ -66,6 +66,7 @@ export const defaultShortcuts: Record<string, ShortcutBinding> = {
 interface SettingsData {
   audioQuality: AudioQuality;
   downloadPath: string;
+  localMusicPaths: string[];
   theme: ThemeColor;
   appearance: Appearance;
   closeAction: CloseAction;
@@ -87,6 +88,7 @@ function loadSettings(): SettingsData {
         return {
           audioQuality: parsed.audioQuality || 'standard',
           downloadPath: parsed.downloadPath || '',
+          localMusicPaths: parsed.localMusicPaths || [],
           theme: validThemes.includes(parsed.theme.slice(6)) ? parsed.theme.slice(6) : 'blue',
           appearance: 'light',
           closeAction: parsed.closeAction || 'ask',
@@ -98,6 +100,7 @@ function loadSettings(): SettingsData {
       return {
         audioQuality: parsed.audioQuality || 'standard',
         downloadPath: parsed.downloadPath || '',
+        localMusicPaths: parsed.localMusicPaths || [],
         theme: validThemes.includes(theme) ? theme : 'blue',
         appearance,
         closeAction: parsed.closeAction || 'ask',
@@ -110,6 +113,7 @@ function loadSettings(): SettingsData {
   return {
     audioQuality: 'standard',
     downloadPath: '',
+    localMusicPaths: [],
     theme: 'blue',
     appearance: 'dark',
     closeAction: 'ask',
@@ -124,6 +128,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const audioQuality = ref<AudioQuality>(saved.audioQuality);
   const downloadPath = ref<string>(saved.downloadPath);
+  const localMusicPaths = ref<string[]>(saved.localMusicPaths);
   const theme = ref<ThemeColor>(saved.theme);
   const appearance = ref<Appearance>(saved.appearance);
   const closeAction = ref<CloseAction>(saved.closeAction || 'ask');
@@ -141,6 +146,16 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function setDownloadPath(p: string) {
     downloadPath.value = p;
+  }
+
+  function addLocalMusicPath(p: string) {
+    if (!localMusicPaths.value.includes(p)) {
+      localMusicPaths.value = [...localMusicPaths.value, p];
+    }
+  }
+
+  function removeLocalMusicPath(p: string) {
+    localMusicPaths.value = localMusicPaths.value.filter(v => v !== p);
   }
 
   function setTheme(t: ThemeColor) {
@@ -170,6 +185,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function resetAll() {
     audioQuality.value = 'standard';
     downloadPath.value = '';
+    localMusicPaths.value = [];
     theme.value = 'blue';
     appearance.value = 'dark';
     closeAction.value = 'ask';
@@ -178,10 +194,11 @@ export const useSettingsStore = defineStore('settings', () => {
     volume.value = 100;
   }
 
-  watch([audioQuality, downloadPath, theme, appearance, closeAction, shortcuts, outputDevice, volume], () => {
+  watch([audioQuality, downloadPath, localMusicPaths, theme, appearance, closeAction, shortcuts, outputDevice, volume], () => {
     const data: SettingsData = {
       audioQuality: audioQuality.value,
       downloadPath: downloadPath.value,
+      localMusicPaths: localMusicPaths.value,
       theme: theme.value,
       appearance: appearance.value,
       closeAction: closeAction.value,
@@ -195,6 +212,7 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     audioQuality,
     downloadPath,
+    localMusicPaths,
     theme,
     appearance,
     dataTheme,
@@ -204,6 +222,8 @@ export const useSettingsStore = defineStore('settings', () => {
     volume,
     setAudioQuality,
     setDownloadPath,
+    addLocalMusicPath,
+    removeLocalMusicPath,
     setTheme,
     setAppearance,
     setCloseAction,

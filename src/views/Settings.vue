@@ -1,9 +1,8 @@
 <template>
   <div class="p-8 text-content">
-    <button @click="$router.back()" class="mb-4 text-content-2 hover:text-content transition">
-      ← 返回
-    </button>
-    <h1 class="text-2xl font-bold mb-8">设置</h1>
+    <PageHeader>
+      <h1 class="text-2xl font-bold">设置</h1>
+    </PageHeader>
 
     <section class="mb-8">
       <h2 class="text-sm text-content-2 uppercase tracking-wider mb-4">播放</h2>
@@ -263,6 +262,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { open } from '@tauri-apps/plugin-dialog';
 import CustomSelect from '../components/CustomSelect.vue';
+import PageHeader from '../components/PageHeader.vue';
 import IconX from '~icons/lucide/x';
 import IconFileText from '~icons/lucide/file-text';
 import IconLoader2 from '~icons/lucide/loader-2';

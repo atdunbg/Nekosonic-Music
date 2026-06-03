@@ -173,9 +173,11 @@ pub fn run() {
             audio::seek_audio,
             audio::get_audio_position,
             audio::set_volume,
+            audio::is_audio_playing,
 
             api::download_song,
             api::list_local_songs,
+            api::scan_local_folders,
             api::delete_local_song,
             api::check_local_song,
             api::get_default_download_path,
@@ -184,11 +186,17 @@ pub fn run() {
             api::artist_songs,
             api::artist_album,
             api::artist_desc,
+            api::artist_sub,
+            api::artist_sublist,
             api::album_detail,
             api::comment_new,
             api::comment_hot,
             api::comment_floor,
             api::comment_like,
+            api::user_cloud,
+            api::user_cloud_detail,
+            api::user_cloud_del,
+            api::cloud_upload,
         ])
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

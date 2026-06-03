@@ -2,6 +2,7 @@ use ncm_api_rs::{create_client, ApiClient, Query};
 use serde::Deserialize;
 use serde_json::json;
 use tauri::{Manager, State, Emitter};
+use tokio::sync::Mutex as AsyncMutex;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::Ordering;
 
@@ -44,14 +45,14 @@ use base64::Engine;
 ///    ```
 macro_rules! api_call {
     ($state:expr, $method:ident) => {{
-        let client = $state.client.lock().unwrap().clone();
+        let client = $state.client.lock().await.clone();
         let q = $state.build_query();
         client.$method(&q).await
             .map(|r| r.body.to_string())
             .map_err(|e| e.to_string())
     }};
     ($state:expr, $method:ident, params: [$(($key:expr, $val:expr)),* $(,)?]) => {{
-        let client = $state.client.lock().unwrap().clone();
+        let client = $state.client.lock().await.clone();
         let mut q = $state.build_query();
         $(q = q.param($key, $val);)*
         client.$method(&q).await
@@ -59,7 +60,7 @@ macro_rules! api_call {
             .map_err(|e| e.to_string())
     }};
     ($state:expr, $method:ident, query: $q:expr) => {{
-        let client = $state.client.lock().unwrap().clone();
+        let client = $state.client.lock().await.clone();
         client.$method(&$q).await
             .map(|r| r.body.to_string())
             .map_err(|e| e.to_string())
@@ -67,7 +68,7 @@ macro_rules! api_call {
 }
 
 pub struct ApiController {
-    client: StdMutex<ApiClient>,
+    client: AsyncMutex<ApiClient>,
     cookie: StdMutex<Option<String>>,
     cookie_path: PathBuf,
 }
@@ -94,7 +95,7 @@ impl ApiController {
 
     let client = create_client(None);
     ApiController {
-        client: StdMutex::new(client),
+        client: AsyncMutex::new(client),
         cookie: StdMutex::new(saved_cookie),
         cookie_path,
     }
@@ -111,11 +112,10 @@ impl ApiController {
     query
 }
     /// 将 Cookie 字符串持久化到本地文件并同步到 API 客户端
-    fn save_cookie(&self, cookie_str: &str) {
+    async fn save_cookie(&self, cookie_str: &str) {
         let _ = fs::write(&self.cookie_path, cookie_str);
-        if let Ok(mut client) = self.client.lock() {
-            client.set_cookie(cookie_str.to_string());
-        }
+        let mut client = self.client.lock().await;
+        client.set_cookie(cookie_str.to_string());
     }
 }
 
@@ -191,7 +191,7 @@ pub struct SongUrlQuery { pub id: u64, pub level: Option<String>, pub fm_mode: O
 /// 获取歌曲播放地址（返回完整 data 对象，包含 url、freeTrialInfo 等）
 #[tauri::command]
 pub async fn get_song_url(query: SongUrlQuery, state: State<'_, ApiController>) -> Result<String, String> {
-    let client = state.client.lock().unwrap().clone();
+    let client = state.client.lock().await.clone();
     let level = query.level.as_deref().unwrap_or("standard");
 
     let resp = if query.fm_mode.unwrap_or(false) {
@@ -251,7 +251,7 @@ pub async fn get_playlist_detail(id: u64, state: State<'_, ApiController>) -> Re
 /// 手机号密码登录
 #[tauri::command]
 pub async fn login(query: LoginQuery, state: State<'_, ApiController>) -> Result<String, String> {
-    let client = state.client.lock().unwrap().clone();
+    let client = state.client.lock().await.clone();
     let q = Query::new()
         .param("phone", &query.phone)
         .param("password", &query.password);
@@ -260,7 +260,7 @@ pub async fn login(query: LoginQuery, state: State<'_, ApiController>) -> Result
     if !resp.cookie.is_empty() {
         let cookie_str = cookies_to_key_values(&resp.cookie);
         *state.cookie.lock().map_err(|e| e.to_string())? = Some(cookie_str.clone());
-        state.save_cookie(&cookie_str);
+        state.save_cookie(&cookie_str).await;
     }
 
     Ok(resp.body.to_string())
@@ -277,7 +277,7 @@ pub async fn logout(state: State<'_, ApiController>) -> Result<(), String> {
 /// 获取二维码登录密钥
 #[tauri::command]
 pub async fn get_qr_key(state: State<'_, ApiController>) -> Result<String, String> {
-    let client = state.client.lock().unwrap().clone();
+    let client = state.client.lock().await.clone();
     let q = state.build_query();
     let resp = client.login_qr_key(&q).await.map_err(|e| e.to_string())?;
     resp.body["unikey"]
@@ -292,7 +292,7 @@ pub async fn create_qr(
     query: QrKeyQuery,
     state: State<'_, ApiController>,
 ) -> Result<String, String> {
-    let client = state.client.lock().unwrap().clone();
+    let client = state.client.lock().await.clone();
     let q = state
         .build_query()
         .param("key", &query.key)
@@ -308,13 +308,13 @@ pub async fn create_qr(
 /// 检查二维码扫码状态
 #[tauri::command]
 pub async fn check_qr_status(query: QrKeyQuery, state: State<'_, ApiController>) -> Result<String, String> {
-    let client = state.client.lock().unwrap().clone();
+    let client = state.client.lock().await.clone();
     let q = state.build_query().param("key", &query.key);
     let resp = client.login_qr_check(&q).await.map_err(|e| e.to_string())?;
     if resp.body["code"].as_u64() == Some(803) && !resp.cookie.is_empty() {
         let cookie_str = cookies_to_key_values(&resp.cookie);
         *state.cookie.lock().map_err(|e| e.to_string())? = Some(cookie_str.clone());
-        state.save_cookie(&cookie_str);
+        state.save_cookie(&cookie_str).await;
     }
     Ok(resp.body.to_string())
 }
@@ -500,7 +500,7 @@ pub async fn download_song(
     let q = state.build_query()
         .param("id", &query.id.to_string())
         .param("level", level);
-    let client = state.client.lock().unwrap().clone();
+    let client = state.client.lock().await.clone();
     let resp = client.song_url_v1(&q).await.map_err(|e| e.to_string())?;
     let data = &resp.body["data"][0];
     let url = data["url"].as_str().filter(|s| !s.is_empty());
@@ -582,18 +582,17 @@ pub async fn download_song(
     Ok(filename)
 }
 
-/// 列出本地已下载的歌曲，优先使用元数据文件补充信息
-#[tauri::command]
-pub fn list_local_songs(app_handle: tauri::AppHandle, download_path: Option<String>) -> Result<Vec<LocalSongInfo>, String> {
-    let download_dir = resolve_download_dir(&app_handle, download_path.as_deref());
-    if !download_dir.exists() {
+/// 扫描指定目录下的音频文件，优先使用元数据文件补充信息
+/// `downloaded_only` 为 true 时，只返回有对应 .json 元数据的文件（即通过应用下载的）
+fn scan_dir_for_songs(dir: &PathBuf, downloaded_only: bool) -> Result<Vec<LocalSongInfo>, String> {
+    if !dir.exists() {
         return Ok(Vec::new());
     }
 
     let audio_exts = ["mp3", "flac", "wav", "ogg", "aac", "m4a", "wma", "opus"];
 
     let mut meta_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
-    let entries = fs::read_dir(&download_dir).map_err(|e| format!("读取目录失败: {}", e))?;
+    let entries = fs::read_dir(dir).map_err(|e| format!("读取目录失败: {}", e))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -609,7 +608,7 @@ pub fn list_local_songs(app_handle: tauri::AppHandle, download_path: Option<Stri
     }
 
     let mut songs: Vec<LocalSongInfo> = Vec::new();
-    let entries = fs::read_dir(&download_dir).map_err(|e| format!("读取目录失败: {}", e))?;
+    let entries = fs::read_dir(dir).map_err(|e| format!("读取目录失败: {}", e))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -620,6 +619,11 @@ pub fn list_local_songs(app_handle: tauri::AppHandle, download_path: Option<Stri
 
         let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
         let file_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+        // 下载音乐模式：只显示有 .json 元数据的文件
+        if downloaded_only && !meta_map.contains_key(&filename) {
+            continue;
+        }
 
         let (title, artist, album, duration_ms, cover_b64) = read_audio_metadata(&path);
 
@@ -676,6 +680,36 @@ pub fn list_local_songs(app_handle: tauri::AppHandle, download_path: Option<Stri
     }
 
     Ok(songs)
+}
+
+/// 列出本地已下载的歌曲（下载目录）
+#[tauri::command]
+pub async fn list_local_songs(app_handle: tauri::AppHandle, download_path: Option<String>) -> Result<Vec<LocalSongInfo>, String> {
+    let download_dir = resolve_download_dir(&app_handle, download_path.as_deref());
+    tokio::task::spawn_blocking(move || {
+        scan_dir_for_songs(&download_dir, true) // 只显示下载的歌曲
+    }).await.map_err(|e| format!("扫描任务失败: {}", e))?
+}
+
+/// 扫描多个本地文件夹中的音频文件
+#[tauri::command]
+pub async fn scan_local_folders(paths: Vec<String>) -> Result<Vec<LocalSongInfo>, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut all_songs: Vec<LocalSongInfo> = Vec::new();
+        let mut seen_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for p in &paths {
+            let dir = PathBuf::from(p);
+            let songs = scan_dir_for_songs(&dir, false)?; // 本地音乐：显示所有音频
+            for song in songs {
+                if seen_paths.insert(song.path.clone()) {
+                    all_songs.push(song);
+                }
+            }
+        }
+
+        Ok(all_songs)
+    }).await.map_err(|e| format!("扫描任务失败: {}", e))?
 }
 
 /// 读取音频文件的元数据（标题、艺术家、专辑、时长、封面）
@@ -743,29 +777,33 @@ pub struct DeleteLocalSongQuery {
 
 /// 删除本地已下载的歌曲文件及其元数据
 #[tauri::command]
-pub fn delete_local_song(
+pub async fn delete_local_song(
     app_handle: tauri::AppHandle,
     query: DeleteLocalSongQuery,
 ) -> Result<(), String> {
     let download_dir = resolve_download_dir(&app_handle, query.download_path.as_deref());
-    let file_path = download_dir.join(&query.filename);
-    let meta_path = download_dir.join(format!("{}.json", query.id));
+    tokio::task::spawn_blocking(move || {
+        let file_path = download_dir.join(&query.filename);
+        let meta_path = download_dir.join(format!("{}.json", query.id));
 
-    if file_path.exists() {
-        fs::remove_file(&file_path).map_err(|e| format!("删除文件失败: {}", e))?;
-    }
-    if meta_path.exists() {
-        fs::remove_file(&meta_path).map_err(|e| format!("删除元数据失败: {}", e))?;
-    }
-    Ok(())
+        if file_path.exists() {
+            fs::remove_file(&file_path).map_err(|e| format!("删除文件失败: {}", e))?;
+        }
+        if meta_path.exists() {
+            fs::remove_file(&meta_path).map_err(|e| format!("删除元数据失败: {}", e))?;
+        }
+        Ok(())
+    }).await.map_err(|e| format!("删除任务失败: {}", e))?
 }
 
 /// 检查指定歌曲是否已下载到本地
 #[tauri::command]
-pub fn check_local_song(app_handle: tauri::AppHandle, id: u64, download_path: Option<String>) -> Result<bool, String> {
+pub async fn check_local_song(app_handle: tauri::AppHandle, id: u64, download_path: Option<String>) -> Result<bool, String> {
     let download_dir = resolve_download_dir(&app_handle, download_path.as_deref());
-    let meta_path = download_dir.join(format!("{}.json", id));
-    Ok(meta_path.exists())
+    tokio::task::spawn_blocking(move || {
+        let meta_path = download_dir.join(format!("{}.json", id));
+        Ok(meta_path.exists())
+    }).await.map_err(|e| format!("检查任务失败: {}", e))?
 }
 
 /// 解析下载目录，优先使用自定义路径，否则使用默认目录
@@ -795,7 +833,7 @@ fn get_default_download_dir(app_handle: &tauri::AppHandle) -> PathBuf {
 
 /// 获取默认下载路径字符串，供前端使用
 #[tauri::command]
-pub fn get_default_download_path(app_handle: tauri::AppHandle) -> String {
+pub async fn get_default_download_path(app_handle: tauri::AppHandle) -> String {
     get_default_download_dir(&app_handle).to_string_lossy().to_string()
 }
 
@@ -865,6 +903,28 @@ pub async fn artist_album(id: u64, limit: Option<u32>, offset: Option<u32>, stat
 #[tauri::command]
 pub async fn artist_desc(id: u64, state: State<'_, ApiController>) -> Result<String, String> {
     api_call!(state, artist_desc, params: [("id", &id.to_string())])
+}
+
+/// 关注/取消关注歌手
+#[derive(Deserialize)]
+pub struct ArtistSubQuery { pub id: u64, pub sub: Option<bool> }
+
+#[tauri::command]
+pub async fn artist_sub(query: ArtistSubQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let t = if query.sub.unwrap_or(true) { "1" } else { "0" };
+    api_call!(state, artist_sub, params: [("id", &query.id.to_string()), ("t", t)])
+}
+
+/// 获取已关注的歌手列表
+#[derive(Deserialize)]
+pub struct ArtistSublistQuery { pub limit: Option<u32>, pub offset: Option<u32> }
+
+#[tauri::command]
+pub async fn artist_sublist(query: ArtistSublistQuery, state: State<'_, ApiController>) -> Result<String, String> {
+    let q = state.build_query()
+        .param("limit", &query.limit.unwrap_or(100).to_string())
+        .param("offset", &query.offset.unwrap_or(0).to_string());
+    api_call!(state, artist_sublist, query: &q)
 }
 
 /// 获取专辑详情
@@ -976,4 +1036,289 @@ pub struct CommentLikeQuery {
     pub r#type: u8,
     pub id: u64,
     pub cid: u64,
+}
+
+// ==================== 云盘 ====================
+
+/// 获取云盘列表
+#[tauri::command]
+pub async fn user_cloud(limit: Option<u32>, offset: Option<u32>, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, user_cloud, params: [("limit", &limit.unwrap_or(30).to_string()), ("offset", &offset.unwrap_or(0).to_string())])
+}
+
+/// 获取云盘歌曲详情
+#[tauri::command]
+pub async fn user_cloud_detail(id: String, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, user_cloud_detail, params: [("id", &id)])
+}
+
+/// 删除云盘歌曲
+#[tauri::command]
+pub async fn user_cloud_del(id: u64, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, user_cloud_del, params: [("id", &id.to_string())])
+}
+
+/// 查询 NOS LBS 获取上传节点域名
+///
+/// 通过 `http://wannos.127.net/lbs` 查询指定 bucket 的上传节点，
+/// 从返回的 `nosup-<region><n>.127.net` 中提取区域标识，
+/// 构造 multipart upload 所需的 `<bucket>.nos-<region>.163yun.com` 域名。
+async fn query_nos_upload_host(bucket: &str) -> Result<String, String> {
+    let lbs_url = format!("http://wannos.127.net/lbs?version=1.0&bucketname={}", bucket);
+    let http = reqwest::Client::new();
+    let resp = http.get(&lbs_url).send().await
+        .map_err(|e| format!("LBS查询请求失败: {}", e))?;
+
+    let lbs_data: serde_json::Value = resp.json().await
+        .map_err(|e| format!("LBS响应解析失败: {}", e))?;
+
+    let nosup_url = lbs_data["upload"][0].as_str()
+        .ok_or_else(|| format!("LBS响应缺少upload字段: {}", lbs_data))?;
+
+    // 从 "nosup-jd1.127.net" 中提取区域 "jd"
+    let region = extract_nos_region(nosup_url)?;
+    Ok(format!("https://{}.nos-{}.163yun.com", bucket, region))
+}
+
+/// 从 nosup 上传节点 URL 中提取 NOS 区域标识
+///
+/// 例如: `http://nosup-jd1.127.net` → `jd`
+///       `http://nosup-hz1.127.net` → `hz`
+fn extract_nos_region(nosup_url: &str) -> Result<String, String> {
+    let start = nosup_url.find("nosup-")
+        .ok_or_else(|| format!("无法从LBS响应中解析区域: {}", nosup_url))?;
+    let after = &nosup_url[start + 6..];
+    let dot = after.find('.')
+        .ok_or_else(|| format!("无法从LBS响应中解析区域: {}", nosup_url))?;
+    let region_with_num = &after[..dot];
+    // 去掉末尾数字: "jd1" → "jd"
+    let region: String = region_with_num
+        .chars()
+        .take_while(|c| !c.is_ascii_digit())
+        .collect();
+    if region.is_empty() {
+        return Err(format!("区域标识为空: {}", nosup_url));
+    }
+    Ok(region)
+}
+
+/// 云盘上传：完整流程（检查 → [获取Token → LBS查询 → NOS上传] → 提交信息 → 发布）
+///
+/// 关键发现：upload check 返回的 songId 是十六进制字符串（如 MD5 摘要），不是数字 ID。
+/// needUpload=false 表示文件已在 NOS 上，无需重复上传，直接走 info+pub 即可。
+/// 参考 ydq/netease-cloud-disk-music-upload 实现。
+#[tauri::command]
+pub async fn cloud_upload(file_path: String, app_handle: tauri::AppHandle, state: State<'_, ApiController>) -> Result<String, String> {
+    let path = PathBuf::from(&file_path);
+    if !path.exists() {
+        return Err("文件不存在".to_string());
+    }
+
+    let file_bytes = fs::read(&path).map_err(|e| format!("读取文件失败: {}", e))?;
+    let file_size = file_bytes.len() as i64;
+    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+    // 计算 MD5
+    let md5_hex = format!("{:x}", md5::compute(&file_bytes));
+
+    // 读取音频元数据
+    let (song_name, artist, album, _duration, _cover) = read_audio_metadata(&path);
+    let bitrate = {
+        match lofty::read_from_path(&path) {
+            Ok(tf) => {
+                let br = tf.properties().audio_bitrate().unwrap_or(0) * 1000;
+                if br > 0 { br.to_string() } else { "999000".to_string() }
+            }
+            Err(_) => "999000".to_string()
+        }
+    };
+
+    // 文件扩展名
+    let ext = if filename.contains('.') {
+        filename.rsplit('.').next().unwrap_or("mp3").to_string()
+    } else {
+        "mp3".to_string()
+    };
+
+    let client = state.client.lock().await.clone();
+
+    // Step 1: 上传检查
+    let check_q = state.build_query()
+        .param("bitrate", &bitrate)
+        .param("length", &file_size.to_string())
+        .param("md5", &md5_hex)
+        .param("ext", &ext)
+        .param("songId", "0");
+
+    let check_res = client.cloud_upload_check(&check_q).await
+        .map_err(|e| format!("上传检查失败: {}", e))?;
+    let check_data = &check_res.body;
+
+    // songId 是十六进制字符串（非数字），需要保持字符串传递
+    let song_id = check_data["songId"].as_str().unwrap_or("0").to_string();
+    let need_upload = check_data["needUpload"].as_bool().unwrap_or(true);
+
+    let mut resource_id = String::new();
+
+    // Step 2-4: 仅在 needUpload=true 时执行 NOS 上传
+    if need_upload {
+        // Step 2: 获取 NOS 上传 Token
+        let token_q = state.build_query()
+            .param("filename", &filename)
+            .param("md5", &md5_hex);
+
+        let token_res = client.cloud_upload_token_alloc(&token_q).await
+            .map_err(|e| format!("获取上传Token失败: {}", e))?;
+        let token_data = &token_res.body;
+
+        resource_id = token_data["result"]["resourceId"].as_str().unwrap_or("").to_string();
+        let object_key_raw = token_data["result"]["objectKey"].as_str().unwrap_or("").to_string();
+        let object_key = object_key_raw.replace('/', "%2F");
+        let token_str = token_data["result"]["token"].as_str().unwrap_or("").to_string();
+
+        if token_str.is_empty() {
+            return Err(format!("获取上传Token为空, 响应: {}", token_data));
+        }
+
+        // Step 3: 查询 LBS 获取正确的 NOS 上传节点
+        let bucket = "jd-musicrep-privatecloud-audio-public";
+        let nos_host = query_nos_upload_host(bucket).await
+            .unwrap_or_else(|_| format!("https://{}.nos-jd.163yun.com", bucket));
+
+        let content_type = match ext.as_str() {
+            "flac" => "audio/flac",
+            "wav" => "audio/wav",
+            "ogg" => "audio/ogg",
+            "aac" | "m4a" => "audio/aac",
+            _ => "audio/mpeg",
+        };
+
+        // Step 4: 上传文件到 NOS（multipart upload）
+        let http_client = reqwest::Client::new();
+
+        // 4a: 初始化 multipart upload
+        let init_url = format!("{}/{}?uploads", nos_host, object_key);
+        let init_res = http_client.post(&init_url)
+            .header("x-nos-token", &token_str)
+            .header("X-Nos-Meta-Content-Type", content_type)
+            .send()
+            .await
+            .map_err(|e| format!("初始化NOS上传失败: {}", e))?;
+
+        let init_status = init_res.status();
+        let init_xml = init_res.text().await.map_err(|e| format!("读取NOS响应失败: {}", e))?;
+
+        if !init_status.is_success() {
+            return Err(format!("初始化NOS上传失败: HTTP {} 响应: {}", init_status, init_xml));
+        }
+
+        // 解析 UploadId
+        let upload_id = init_xml
+            .split("<UploadId>")
+            .nth(1)
+            .and_then(|s| s.split("</UploadId>").next())
+            .unwrap_or_default()
+            .to_string();
+
+        if upload_id.is_empty() {
+            return Err(format!("获取UploadId失败, NOS响应: {}", init_xml));
+        }
+
+        // 4b: 分块上传（每块 10MB）
+        let block_size = 10 * 1024 * 1024;
+        let file_size_usize = file_bytes.len();
+        let mut offset = 0usize;
+        let mut block_index = 1u32;
+        let mut etags = Vec::new();
+        let total_blocks = ((file_size_usize + block_size - 1) / block_size).max(1);
+
+        while offset < file_size_usize {
+            let end = (offset + block_size).min(file_size_usize);
+            let chunk = file_bytes[offset..end].to_vec();
+
+            let part_url = format!(
+                "{}/{}?partNumber={}&uploadId={}",
+                nos_host, object_key, block_index, upload_id
+            );
+
+            let part_res = http_client.put(&part_url)
+                .header("x-nos-token", &token_str)
+                .header("Content-Type", content_type)
+                .body(chunk)
+                .send()
+                .await
+                .map_err(|e| format!("上传分块{}失败: {}", block_index, e))?;
+
+            if let Some(etag) = part_res.headers().get("etag") {
+                etags.push(etag.to_str().unwrap_or_default().to_string());
+            }
+
+            // 发送上传进度
+            let progress = (block_index as f64 / total_blocks as f64 * 100.0).min(100.0);
+            let _ = app_handle.emit("cloud-upload-progress", json!({
+                "filename": filename,
+                "progress": progress,
+                "uploaded": end,
+                "total": file_size_usize,
+            }));
+
+            offset = end;
+            block_index += 1;
+        }
+
+        // 4c: 完成 multipart upload
+        let mut complete_xml = String::from("<CompleteMultipartUpload>");
+        for (i, etag) in etags.iter().enumerate() {
+            complete_xml.push_str(&format!(
+                "<Part><PartNumber>{}</PartNumber><ETag>{}</ETag></Part>",
+                i + 1, etag
+            ));
+        }
+        complete_xml.push_str("</CompleteMultipartUpload>");
+
+        let complete_url = format!("{}/{}?uploadId={}", nos_host, object_key, upload_id);
+        let complete_res = http_client.post(&complete_url)
+            .header("Content-Type", "text/plain;charset=UTF-8")
+            .header("X-Nos-Meta-Content-Type", content_type)
+            .header("x-nos-token", &token_str)
+            .body(complete_xml)
+            .send()
+            .await
+            .map_err(|e| format!("完成NOS上传失败: {}", e))?;
+
+        if !complete_res.status().is_success() {
+            let status = complete_res.status();
+            let body = complete_res.text().await.unwrap_or_default();
+            return Err(format!("完成NOS上传失败: HTTP {} 响应: {}", status, body));
+        }
+    }
+
+    // Step 5: 提交歌曲信息（songId 使用 check 返回的字符串值）
+    let info_q = state.build_query()
+        .param("md5", &md5_hex)
+        .param("songId", &song_id)
+        .param("filename", &filename)
+        .param("song", &song_name)
+        .param("album", &album)
+        .param("artist", &artist)
+        .param("bitrate", &bitrate)
+        .param("resourceId", &resource_id);
+
+    let info_res = client.cloud_upload_info(&info_q).await
+        .map_err(|e| format!("提交歌曲信息失败: {}", e))?;
+    let info_data = &info_res.body;
+
+    // info 可能返回新的 songId，优先使用
+    let final_song_id = info_data["songId"].as_str()
+        .filter(|s| s != &"0" && !s.is_empty())
+        .unwrap_or(&song_id)
+        .to_string();
+
+    // Step 6: 发布
+    let pub_q = state.build_query().param("songId", &final_song_id);
+    let pub_res = client.cloud_publish(&pub_q).await
+        .map_err(|e| format!("发布失败: {}", e))?;
+
+    let _ = app_handle.emit("cloud-upload-complete", &filename);
+    Ok(pub_res.body.to_string())
 }

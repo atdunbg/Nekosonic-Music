@@ -1,126 +1,102 @@
+<div align="center">
+
 # Nekosonic
 
-一款轻量的跨平台音乐播放器，支持 Windows / Linux / macOS，音源源自网易云音乐。
+轻量跨平台桌面音乐播放器 · 网易云音乐
 
-## ✨ 特性
+[![Windows](https://img.shields.io/badge/Windows-0078D4?logo=windows11&logoColor=white)](https://github.com/atdunbg/Nekosonic-Music/releases)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](https://github.com/atdunbg/Nekosonic-Music/releases)
+[![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)](https://github.com/atdunbg/Nekosonic-Music/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-### 播放
+[下载安装](https://github.com/atdunbg/Nekosonic-Music/releases)
 
-- 🎵 在线音乐播放，流式缓冲边下边播
-- 🎵 多音质选择（标准 / 较高 / 极高 HQ / 无损 SQ / Hi-Res）
-- 🔄 播放模式切换（列表循环 / 随机播放 / 单曲循环）
-- ⏯ 播放控制（播放 / 暂停 / 上一首 / 下一首 / 进度跳转 / 音量调节）
-- 📋 播放队列管理（查看队列 / 移除歌曲 / 清空队列）
-- 📻 私人漫游 FM（个性化推荐，VIP 试听自动跳过）
-- 🎵 本地音乐播放（支持 mp3 / flac / wav / ogg / aac / m4a / wma / opus）
-- 🔊 音频输出设备选择
-- 🎧 系统媒体控制（蓝牙耳机/键盘媒体键/系统面板，支持 Linux / Windows / macOS）
+---
 
-### 发现与浏览
+</div>
 
-- 🔍 关键词搜索歌曲 + 热门搜索标签
-- 📋 歌单浏览（推荐歌单 / 排行榜 / 用户歌单 / 收藏歌单）
-- 📋 歌单详情（歌曲列表 + 收藏 / 取消收藏 + 歌单评论）
-- 🎤 歌手详情（热门歌曲 / 专辑 / 简介）
-- 💿 专辑详情（歌曲列表 + 播放全部）
-- 📅 每日推荐歌曲
+## 🎵 播放
 
-### 歌词与评论
+- 多音质选择（标准 / 较高 / HQ / SQ / Hi-Res）
+- 私人漫游 FM（个性化推荐）
+- 系统媒体控制集成（MPRIS / SMTC / Now Playing）
+- 音频输出设备选择
 
-- 🎤 实时滚动歌词（自动滚动 / 点击跳转 / 渐变透明度）
-- 🎤 歌词翻译显示
-- 🎤 全屏漫游模式（大封面 + 歌词 / 评论双标签页）
-- 💬 歌曲评论查看（热门评论 + 无限滚动加载 + 点赞）
+## 🔍 发现
 
-### 收藏与下载
+- 关键词搜索（歌曲 / 歌手 / 专辑）+ 搜索建议 + 热门搜索
+- 歌单浏览（推荐 / 排行榜 / 用户 / 收藏）
+- 歌手详情（热门歌曲 / 专辑 / 简介 + 关注）
+- 专辑详情
+- 每日推荐歌曲
 
-- ❤️ 一键喜欢 / 取消喜欢（同步到网易云账号）
-- ⬇️ 歌曲下载（带进度显示 / VIP 拦截 / 元数据保存）
-- 🎵 本地音乐管理（列出 / 播放 / 删除 / 音频元数据与封面读取）
-- 🕐 本地播放历史记录（最多 200 首）
+## 🎤 歌词与评论
 
-### 账号
+- 实时滚动歌词（ease-out 缓动 / 点击跳转 / 渐变透明度）
+- 歌词翻译
+- 全屏漫游模式（封面主色提取 + 歌词/评论双标签）
+- 歌曲评论（无限滚动 + 点赞）
 
-- 🔴 网易云账号登录（二维码扫码 / 手机号密码）
-- 🔑 登录态持久化（重启后自动恢复）
+## ❤️ 收藏与下载
 
-### 系统与设置
+- 一键喜欢 / 取消喜欢（同步到网易云账号）
+- 歌曲下载
+- 音乐云盘（上传 / 删除 / 详情 / 存储空间 / 上传进度）
+- 本地音乐（多文件夹扫描 / 封面补全）
+- 下载音乐（独立管理 / 删除）
 
-- 📡 系统托盘（播放控制 / 显示窗口 / 退出）
-- 🛡 单实例运行（防止重复启动）
-- ⌨️ 自定义快捷键（应用内 + 系统全局）
-- 🎨 多主题切换（天蓝 / 翠绿 / 玫红 / 紫罗兰 / 橙色 / 青色 / 粉色）
-- ⚙️ 关闭窗口行为设置（每次询问 / 最小化到托盘 / 直接退出）
-- 🔄 自动更新（启动静默检测 + 自定义弹窗 + 忽略版本 + 下载进度）
-- 📝 更新日志查看
-- 📶 网络状态检测（断网/恢复 Toast 提示 + 自动重试加载）
+## 🎨 个性化
 
-## 📦️ 安装
+- 多主题色（天蓝 / 翠绿 / 玫红 / 紫罗兰 / 橙色 / 青色 / 粉色）
+- 自定义快捷键（应用内 + 系统全局）
+- 关闭行为设置
+- 自动更新
 
-访问本项目的 [Releases](https://github.com/atdunbg/Nekosonic-Music/releases) 页面下载安装包。
+---
 
-## 💻 配置开发环境
+## 安装
+
+前往 [Releases](https://github.com/atdunbg/Nekosonic-Music/releases) 下载对应平台安装包。
+
+## 配置开发环境
 
 ```bash
-# 安装前端依赖
 npm install
-
-# 启动开发服务器
-npm run tauri dev
-
-# 构建发布
-npm run tauri build
+npm run tauri dev      # 开发
+npm run tauri build    # 构建
 ```
 
-### 环境要求
+> 环境要求：Node.js ≥ 18 · Rust ≥ 1.70 · Tauri CLI 2
 
-- Node.js >= 18
-- Rust >= 1.70
-- Tauri CLI 2
-
-## 🛠 技术栈
+## 技术栈
 
 | 层级 | 技术 |
-|------|------|
+|:------|:------|
 | 桌面框架 | Tauri 2 |
-| 前端 | Vue 3 + TypeScript |
-| 样式 | Tailwind CSS v4 + CSS 变量主题系统 |
-| 状态管理 | Pinia |
-| 路由 | Vue Router 4 |
-| 音频解码 | symphonia + ringbuf (Rust) |
-| 媒体控制 | souvlaki (Linux MPRIS / Windows SMTC / macOS Now Playing) |
+| 前端 | Vue 3 + TypeScript + Pinia |
+| 样式 | Tailwind CSS v4 + CSS 变量主题 |
+| 音频解码 | symphonia + ringbuf |
+| 媒体控制 | souvlaki |
 | 网易云 API | ncm-api-rs |
-| 构建工具 | Vite 6 |
+| 构建 | Vite 6 |
 
-## ☑️ Todo
+## Todo
 
-- [x] 评论系统
+- [x] 评论查看
 - [x] 歌曲下载
-- [x] 本地音乐管理
+- [x] 本地音乐
 - [x] 歌手详情页
 - [x] 专辑详情页
 - [x] 自定义全局快捷键
 - [x] 自动更新
 - [x] 歌词翻译
 - [x] 更多主题
-- [x] 系统媒体控制（蓝牙耳机/键盘媒体键）
+- [x] 音乐云盘
 - [ ] MV 播放
-- [ ] 音乐云盘
 - [ ] 桌面歌词
 
 欢迎提 Issue 和 Pull request。
 
-## 📜 开源许可
+## 开源许可
 
-本项目仅供个人学习研究使用，禁止用于商业及非法用途。
-
-基于 [MIT license](https://opensource.org/licenses/MIT) 许可进行开源。
-
-## 致谢
-
-- [ncm-api-rs](https://crates.io/crates/ncm-api-rs) — 网易云音乐 API 的 Rust 封装
-- [Tauri](https://tauri.app/) — 跨平台桌面应用框架
-- [Vue.js](https://vuejs.org/) — 渐进式 JavaScript 框架
-- [Tailwind CSS](https://tailwindcss.com/) — 实用优先的 CSS 框架
-- [symphonia](https://crates.io/crates/symphonia) — Rust 纯音频解码库
-- [souvlaki](https://crates.io/crates/souvlaki) — 跨平台 OS 媒体控制库
+本项目仅供个人学习研究使用，禁止用于商业及非法用途。基于 [MIT License](https://opensource.org/licenses/MIT) 开源。

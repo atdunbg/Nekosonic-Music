@@ -35,6 +35,7 @@ pub struct AudioController {
     tx: Sender<AudioCmd>,
     current_url: Arc<Mutex<Option<String>>>,
     position: Arc<Mutex<f64>>,
+    is_playing: Arc<AtomicBool>,
 }
 
 impl AudioController {
@@ -43,11 +44,13 @@ impl AudioController {
         let (tx, rx) = channel();
         let current_url = Arc::new(Mutex::new(None));
         let position = Arc::new(Mutex::new(0.0));
+        let is_playing = Arc::new(AtomicBool::new(false));
         let url_clone = current_url.clone();
         let pos_clone = position.clone();
+        let playing_clone = is_playing.clone();
         let ah_clone = app_handle.clone();
-        thread::spawn(move || audio_thread(rx, url_clone, pos_clone, ah_clone));
-        AudioController { tx, current_url, position }
+        thread::spawn(move || audio_thread(rx, url_clone, pos_clone, playing_clone, ah_clone));
+        AudioController { tx, current_url, position, is_playing }
     }
 
     /// 播放指定URL的网络音频
@@ -77,6 +80,9 @@ impl AudioController {
     /// 获取当前播放位置（秒）
     pub fn get_position(&self) -> f64 {
         *self.position.lock().unwrap()
+    }
+    pub fn get_is_playing(&self) -> bool {
+        self.is_playing.load(Ordering::Relaxed)
     }
 }
 
@@ -908,7 +914,7 @@ fn restart_playback_on_device_change(
 }
 
 /// 音频线程主循环，接收命令并管理播放生命周期，包括设备热切换和播放结束检测
-fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>, shared_position: Arc<Mutex<f64>>, app_handle: AppHandle) {
+fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>, shared_position: Arc<Mutex<f64>>, is_playing: Arc<AtomicBool>, app_handle: AppHandle) {
     let mut selected_device: Option<String> = None;
     let mut current_volume: f32 = 1.0;
     let mut output_ctx: Option<OutputContext> = None;
@@ -925,6 +931,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                 AudioCmd::Play(url) => {
                     audio_active = false;
                     audio_paused = false;
+                    is_playing.store(false, Ordering::Relaxed);
                     manual_stop = false;
                     current_local_path = None;
 
@@ -971,6 +978,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                         Ok(ctx) => {
                             output_ctx = Some(ctx);
                             audio_active = true;
+                            is_playing.store(true, Ordering::Relaxed);
                             let _ = app_handle.emit("audio-started", ());
                         }
                         Err(e) => {
@@ -982,6 +990,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                 AudioCmd::PlayLocal(path) => {
                     audio_active = false;
                     audio_paused = false;
+                    is_playing.store(false, Ordering::Relaxed);
                     manual_stop = false;
                     current_local_path = Some(path.clone());
 
@@ -1008,6 +1017,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                         Ok(ctx) => {
                             output_ctx = Some(ctx);
                             audio_active = true;
+                            is_playing.store(true, Ordering::Relaxed);
                             let _ = app_handle.emit("audio-started", ());
                         }
                         Err(e) => {
@@ -1018,6 +1028,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
 
                 AudioCmd::Pause => {
                     audio_paused = true;
+                    is_playing.store(false, Ordering::Relaxed);
                     if let Some(ref ctx) = output_ctx {
                         ctx.playback.playing.store(false, Ordering::Relaxed);
                     }
@@ -1025,6 +1036,9 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
 
                 AudioCmd::Resume => {
                     audio_paused = false;
+                    if audio_active {
+                        is_playing.store(true, Ordering::Relaxed);
+                    }
                     if let Some(ref ctx) = output_ctx {
                         ctx.playback.playing.store(true, Ordering::Relaxed);
                     }
@@ -1033,6 +1047,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                 AudioCmd::Stop => {
                     audio_active = false;
                     audio_paused = false;
+                    is_playing.store(false, Ordering::Relaxed);
                     manual_stop = true;
                     stop_playback(&mut output_ctx, &shared_position);
                     if let Some(ref buf) = current_audio_buffer {
@@ -1054,6 +1069,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                             output_ctx = Some(ctx);
                             audio_active = true;
                             audio_paused = false;
+                            is_playing.store(true, Ordering::Relaxed);
                         }
                         Err(e) => {
                             eprintln!("[audio] seek 播放失败: {}", e);
@@ -1097,6 +1113,7 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                             && ctx.playback.buffer_exhausted.load(Ordering::Relaxed)
                             && !manual_stop && !audio_paused {
                             audio_active = false;
+                            is_playing.store(false, Ordering::Relaxed);
                             let _ = app_handle.emit("audio-ended", ());
                         }
                         let pos = ctx.playback.position();
@@ -1203,4 +1220,9 @@ pub fn get_audio_position(state: State<'_, AppAudio>) -> f64 {
 #[tauri::command]
 pub fn set_volume(state: State<'_, AppAudio>, vol: f32) {
     if let Ok(ctrl) = state.0.lock() { ctrl.set_volume(vol); }
+}
+
+#[tauri::command]
+pub fn is_audio_playing(state: State<'_, AppAudio>) -> bool {
+    if let Ok(ctrl) = state.0.lock() { ctrl.get_is_playing() } else { false }
 }

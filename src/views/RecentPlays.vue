@@ -1,9 +1,8 @@
 <template>
   <div class="p-8 text-content">
-    <button @click="$router.back()" class="mb-4 text-content-2 hover:text-content transition">
-      ← 返回
-    </button>
-    <h1 class="text-2xl font-bold mb-6">最近播放</h1>
+    <PageHeader>
+      <h1 class="text-2xl font-bold">最近播放</h1>
+    </PageHeader>
     <div v-if="player.recentLocal.length === 0" class="text-content-3">还没有播放记录，去听首歌吧</div>
     <div v-else class="space-y-2">
       <SongListItem
@@ -28,6 +27,7 @@
 <script setup lang="ts">
 import { usePlayerStore } from '../stores/player';
 import SongListItem from '../components/SongListItem.vue';
+import PageHeader from '../components/PageHeader.vue';
 
 const player = usePlayerStore();
 </script>

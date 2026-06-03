@@ -1,10 +1,20 @@
 <template>
   <div class="p-8 text-content">
-    <button @click="$router.back()" class="mb-4 text-content-2 hover:text-content transition">
-      ← 返回
-    </button>
+    <PageHeader />
 
-    <div v-if="album" class="flex gap-6 mb-8">
+    <!-- 头部骨架 -->
+    <div v-if="!album && albumLoading" class="flex gap-6 mb-8">
+      <div class="w-44 h-44 rounded-xl bg-muted animate-pulse flex-shrink-0"></div>
+      <div class="flex-1 space-y-3">
+        <div class="h-7 bg-muted rounded w-1/2 animate-pulse"></div>
+        <div class="h-4 bg-muted rounded w-1/3 animate-pulse"></div>
+        <div class="h-4 bg-muted rounded w-1/4 animate-pulse"></div>
+        <div class="h-10 w-28 bg-muted rounded-full animate-pulse mt-4"></div>
+      </div>
+    </div>
+
+    <!-- 头部信息 -->
+    <div v-else-if="album" class="flex gap-6 mb-8">
       <img :src="album.picUrl" class="w-44 h-44 rounded-xl object-cover shadow-lg flex-shrink-0" />
       <div class="flex flex-col justify-between min-w-0">
         <div>
@@ -34,9 +44,25 @@
       </div>
     </div>
 
-    <div v-if="loading" class="text-content-2">加载中...</div>
+    <!-- 加载失败 -->
+    <div v-if="loadError" class="flex flex-col items-center justify-center py-16 gap-3">
+      <p class="text-content-2 text-sm">加载失败</p>
+      <button @click="fetchAlbum(Number(route.params.id), true)" class="px-4 py-2 bg-subtle hover:bg-muted rounded-lg text-sm transition">重试</button>
+    </div>
 
-    <div v-else class="space-y-1">
+    <!-- 歌曲列表骨架 -->
+    <div v-else-if="songsLoading" class="space-y-1">
+      <div v-for="i in 6" :key="i" class="flex items-center gap-3 px-3 py-2">
+        <div class="w-12 h-12 bg-muted rounded animate-pulse flex-shrink-0"></div>
+        <div class="flex-1 space-y-2">
+          <div class="h-4 bg-muted rounded w-2/3 animate-pulse"></div>
+          <div class="h-3 bg-muted rounded w-1/3 animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 歌曲列表 -->
+    <div v-else-if="songs.length" class="space-y-1">
       <SongListItem
         v-for="(song, index) in songs"
         :key="song.id"
@@ -57,14 +83,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, onActivated } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import { normalizeSong, type Song } from '../utils/song';
 import { formatDate } from '../utils/format';
+import { pageCacheGet, pageCacheSet } from '../composables/usePageCache';
 import SongListItem from '../components/SongListItem.vue';
+import PageHeader from '../components/PageHeader.vue';
 import IconPlay from '~icons/lucide/play';
+
+defineOptions({ name: 'AlbumDetailView' });
 
 const route = useRoute();
 const router = useRouter();
@@ -72,21 +102,42 @@ const player = usePlayerStore();
 
 const album = ref<any>(null);
 const songs = ref<Song[]>([]);
-const loading = ref(true);
+const albumLoading = ref(true);
+const songsLoading = ref(false);
+const loadError = ref(false);
 
-async function fetchAlbum(id: number) {
-  loading.value = true;
+async function fetchAlbum(id: number, force = false) {
+  const cacheKey = `album_${id}`;
+  if (!force) {
+    const cached = pageCacheGet(cacheKey);
+    if (cached) {
+      album.value = cached.album;
+      songs.value = cached.songs;
+      albumLoading.value = false;
+      songsLoading.value = false;
+      loadError.value = false;
+      return;
+    }
+  }
+
+  albumLoading.value = true;
+  songsLoading.value = true;
+  loadError.value = false;
   album.value = null;
   songs.value = [];
   try {
     const jsonStr: string = await MusicApi.albumDetail(id);
     const data = JSON.parse(jsonStr);
     album.value = data.album;
+    albumLoading.value = false;
     songs.value = (data.songs || []).map(normalizeSong);
+    songsLoading.value = false;
+    pageCacheSet(cacheKey, { album: album.value, songs: songs.value });
   } catch (e) {
     console.error(e);
-  } finally {
-    loading.value = false;
+    loadError.value = true;
+    albumLoading.value = false;
+    songsLoading.value = false;
   }
 }
 
@@ -95,7 +146,11 @@ onMounted(() => {
 });
 
 watch(() => route.params.id, (newId) => {
-  if (newId) fetchAlbum(Number(newId));
+  if (newId && route.name === 'album') fetchAlbum(Number(newId));
+});
+
+onActivated(() => {
+  if (loadError.value) fetchAlbum(Number(route.params.id), true);
 });
 
 function playAll() {
