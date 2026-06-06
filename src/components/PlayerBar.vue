@@ -1,6 +1,7 @@
 <template>
   <div
-    class="fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur z-50 select-none"
+    class="fixed bottom-0 left-0 right-0 z-50 select-none backdrop-blur-xl"
+    :style="playerBarBgStyle"
   >
     <div v-if="player.dominantColor"
       class="absolute inset-0 pointer-events-none transition-opacity duration-300"
@@ -10,11 +11,11 @@
       <div class="absolute inset-0 bg-black/60"></div>
     </div>
 
-    <div ref="progressBar" class="w-full h-1.5 rounded-full relative group cursor-pointer overflow-visible"
+    <div ref="progressBar" class="w-full h-1.5 relative group cursor-pointer overflow-visible"
       :class="drawerActive ? 'bg-white/10' : 'bg-muted'"
       @mousedown.prevent="startSeek">
       <div class="absolute left-0 top-0 h-full rounded-full" :class="drawerActive ? 'bg-white/20' : 'bg-emphasis'" :style="{ width: cacheProgress + '%' }"></div>
-      <div class="absolute left-0 top-0 h-full bg-accent rounded-full"
+      <div class="absolute left-0 top-0 h-full rounded-full bg-accent"
         :style="{ width: displayProgress + '%' }"></div>
       <div
         class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-lg border border-line opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
@@ -47,8 +48,8 @@
           <IconHeart v-if="player.currentSong && player.isLiked(player.currentSong.id)" class="w-4 h-4 text-danger [&>path]:fill-current [&>path]:stroke-0" />
           <IconHeart v-else class="w-4 h-4" />
         </button>
-        <button v-if="player.currentSong" @click="player.openRoamDrawer('comment')" class="flex-shrink-0 transition" :class="drawerActive ? 'text-white/50 hover:text-white' : 'text-content-3 hover:text-accent-text'" title="评论">
-          <IconMessageSquare class="w-4 h-4" />
+        <button v-if="player.currentSong" @click="shareSong(player.currentSong.id)" class="flex-shrink-0 transition" :class="drawerActive ? 'text-white/50 hover:text-white' : 'text-content-3 hover:text-accent-text'" title="分享">
+          <IconShare2 class="w-4 h-4" />
         </button>
         <button v-if="player.currentSong && !download.isDownloaded(player.currentSong!.id) && !download.isDownloading(player.currentSong!.id)" @click="download.downloadSong(player.currentSong)" class="flex-shrink-0 transition" :class="drawerActive ? 'text-white/50 hover:text-white' : 'text-content-3 hover:text-accent-text'" title="下载">
           <IconDownload class="w-4 h-4" />
@@ -128,7 +129,7 @@
                 class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-muted hover:bg-emphasis transition text-left">
                 <IconUserRound class="w-[18px] h-[18px] text-content-2 flex-shrink-0" />
                 <div>
-                  <p class="text-sm font-medium">不推荐这个歌手</p>
+                  <p class="text-sm font-medium">减少含此歌手的推荐</p>
                   <p class="text-xs text-content-3 truncate max-w-[200px]">{{ dislikeArtistName }}</p>
                 </div>
               </button>
@@ -213,6 +214,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from 'vue';
 import { usePlayerStore, PlayMode } from '../stores/player';
+import { useSettingsStore } from '../stores/settings';
 import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
 import { getCoverUrl } from '../utils/song';
@@ -232,7 +234,6 @@ import IconRepeat from '~icons/lucide/repeat';
 import IconShuffle from '~icons/lucide/shuffle';
 import IconRepeat1 from '~icons/lucide/repeat-1';
 import IconListMusic from '~icons/lucide/list-music';
-import IconMessageSquare from '~icons/lucide/message-square';
 import IconDownload from '~icons/lucide/download';
 import IconLoader2 from '~icons/lucide/loader-2';
 import IconHeart from '~icons/lucide/heart';
@@ -240,11 +241,26 @@ import IconX from '~icons/lucide/x';
 import IconMusic from '~icons/lucide/music';
 import IconCrosshair from '~icons/lucide/crosshair';
 import IconUserRound from '~icons/lucide/user-round';
+import IconShare2 from '~icons/lucide/share-2';
+import { hexToRgba } from '../utils/color';
 
 const router = useRouter();
 const player = usePlayerStore();
+const settings = useSettingsStore();
 const download = useDownload();
 const drawerActive = computed(() => player.showRoamDrawer && !!player.dominantColor);
+
+// PlayerBar 背景：有壁纸时用 --c-bg 高不透明度（与遮罩层同色系，视觉融合），
+// 无壁纸时用 surface 色
+const playerBarBgStyle = computed(() => {
+  if (settings.currentWallpaper.path) {
+    const bgColor = settings.currentColors.bg;
+    const rgba = hexToRgba(bgColor, 0.82);
+    return { backgroundColor: rgba };
+  }
+  return { backgroundColor: settings.currentColors.surface };
+});
+
 const showQueuePanel = ref(false);
 const showDislikeModal = ref(false);
 const queueListEl = ref<HTMLElement | null>(null);
@@ -367,7 +383,17 @@ async function dislikeArtist() {
   if (!player.currentSong) return;
   showDislikeModal.value = false;
   await player.fmTrash(player.currentSong.id);
-  showToast('已减少该歌手推荐', 'success');
+  showToast('已减少含该歌手的推荐', 'success');
+}
+
+async function shareSong(id: number) {
+  const url = `https://music.163.com/song?id=${id}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('链接已复制', 'success');
+  } catch {
+    showToast('复制失败', 'error');
+  }
 }
 
 function scrollToCurrent() {

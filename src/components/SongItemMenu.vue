@@ -9,6 +9,10 @@
         <IconMessageSquare style="font-size: 14px" />
         评论
       </button>
+      <button @click.stop="handleShare" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-content-2 hover:bg-subtle hover:text-content transition">
+        <IconShare2 style="font-size: 14px" />
+        分享
+      </button>
     </div>
   </div>
 </template>
@@ -16,8 +20,10 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount, onMounted } from 'vue';
 import { usePlayerStore } from '../stores/player';
+import { showToast } from '../composables/useToast';
 import IconEllipsis from '~icons/lucide/ellipsis';
 import IconMessageSquare from '~icons/lucide/message-square';
+import IconShare2 from '~icons/lucide/share-2';
 
 const player = usePlayerStore();
 const props = defineProps<{ songId: number }>();
@@ -31,6 +37,17 @@ function toggle() {
 function handleComment() {
   open.value = false;
   player.openCommentForSong(props.songId);
+}
+
+async function handleShare() {
+  open.value = false;
+  const url = `https://music.163.com/song?id=${props.songId}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('链接已复制', 'success');
+  } catch {
+    showToast('复制失败', 'error');
+  }
 }
 
 function onClickOutside(e: MouseEvent) {

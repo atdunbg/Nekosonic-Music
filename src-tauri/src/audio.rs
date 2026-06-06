@@ -1066,10 +1066,14 @@ fn audio_thread(rx: Receiver<AudioCmd>, _current_url: Arc<Mutex<Option<String>>>
                     let device = get_output_device(&selected_device);
                     match start_playback(mss, &device, current_volume, Some(time)) {
                         Ok(ctx) => {
+                            if audio_paused {
+                                is_playing.store(false, Ordering::Relaxed);
+                                ctx.playback.playing.store(false, Ordering::Relaxed);
+                            } else {
+                                is_playing.store(true, Ordering::Relaxed);
+                            }
                             output_ctx = Some(ctx);
                             audio_active = true;
-                            audio_paused = false;
-                            is_playing.store(true, Ordering::Relaxed);
                         }
                         Err(e) => {
                             eprintln!("[audio] seek 播放失败: {}", e);

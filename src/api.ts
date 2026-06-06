@@ -121,7 +121,7 @@ export namespace MusicApi {
     return invoke('fm_trash', { query: { id, time } });
   }
 
-  export async function scrobble(query: { id: number; sourceid: string; time: number }): Promise<void> {
+  export async function scrobble(query: { id: number; sourceid: string; time: number; alg?: string; source?: string; bitrate?: number }): Promise<void> {
     return invoke('scrobble', { query });
   }
 
@@ -221,5 +221,13 @@ export namespace DownloadApi {
 export namespace AppApi {
   export function exitApp(): Promise<void> {
     return invoke('exit_app');
+  }
+
+  export async function readImageAsDataUrl(path: string): Promise<string> {
+    return invoke('read_image_as_data_url', { path });
+  }
+
+  export async function showItemInFolder(path: string): Promise<void> {
+    return invoke('show_item_in_folder', { path });
   }
 }

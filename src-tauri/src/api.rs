@@ -392,12 +392,51 @@ pub struct ScrobbleQuery {
     pub id: u64,
     pub sourceid: Option<String>,
     pub time: u64,
+    pub alg: Option<String>,
+    pub source: Option<String>,
+    pub bitrate: Option<u64>,
 }
 
 /// 听歌打卡
 #[tauri::command]
 pub async fn scrobble(query: ScrobbleQuery, state: State<'_, ApiController>) -> Result<String, String> {
-    api_call!(state, scrobble, params: [("id", &query.id.to_string()), ("sourceid", query.sourceid.as_deref().unwrap_or("")), ("time", &query.time.to_string())])
+    let client = state.client.lock().await.clone();
+    let cookie = state.cookie.lock().ok().and_then(|g| g.clone()).unwrap_or_default();
+    let option = ncm_api_rs::request::RequestOption {
+        crypto: ncm_api_rs::request::CryptoType::Weapi,
+        cookie: Some(cookie),
+        ua: None,
+        proxy: None,
+        real_ip: None,
+        random_cn_ip: false,
+        e_r: None,
+        domain: None,
+        check_token: false,
+    };
+    let data = json!({
+        "logs": serde_json::to_string(&json!([{
+            "action": "play",
+            "json": {
+                "download": 0,
+                "end": "playend",
+                "id": query.id.to_string(),
+                "sourceId": query.sourceid.as_deref().unwrap_or(""),
+                "time": query.time as i64,
+                "type": "song",
+                "wifi": 0,
+                "source": query.source.as_deref().unwrap_or("list"),
+                "alg": query.alg.as_deref().unwrap_or(""),
+                "bitrate": query.bitrate.unwrap_or(0),
+                "mainsite": 1,
+                "content": ""
+            }
+        }])).unwrap_or_default()
+    });
+    let result = client.request("/api/feedback/weblog", data.clone(), option)
+        .await
+        .map(|r| r.body.to_string())
+        .map_err(|e| e.to_string());
+    result
 }
 
 /// 获取歌曲详情
@@ -852,6 +891,79 @@ fn sanitize_filename(name: &str) -> String {
         .collect::<String>()
         .trim()
         .to_string()
+}
+
+/// 读取本地图片文件并转为 base64 data URL，供前端壁纸等场景使用
+#[tauri::command]
+pub async fn read_image_as_data_url(path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let file_path = PathBuf::from(&path);
+        if !file_path.exists() {
+            return Err(format!("文件不存在: {}", path));
+        }
+        let bytes = fs::read(&file_path).map_err(|e| format!("读取文件失败: {}", e))?;
+        let mime = match file_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase().as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            "bmp" => "image/bmp",
+            "svg" => "image/svg+xml",
+            _ => "image/jpeg", // 默认 jpeg
+        };
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Ok(format!("data:{};base64,{}", mime, b64))
+    }).await.map_err(|e| format!("任务失败: {}", e))?
+}
+
+/// 在系统文件管理器中显示指定文件（选中）
+#[tauri::command]
+pub fn show_item_in_folder(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err(format!("文件不存在: {}", path));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &p.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &p.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let uri = format!("file://{}", p.to_string_lossy());
+        // 优先使用 freedesktop DBus FileManager1 接口（支持选中文件，Nautilus/Dolphin 等均实现）
+        let dbus_ok = std::process::Command::new("dbus-send")
+            .args([
+                "--session",
+                "--print-reply",
+                "--dest=org.freedesktop.FileManager1",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1.ShowItems",
+                &format!("array:string:{}", uri),
+                "string:",
+            ])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        // fallback：仅打开父目录（无法选中文件）
+        if !dbus_ok {
+            let parent = p.parent().unwrap_or(&p).to_string_lossy().to_string();
+            std::process::Command::new("xdg-open")
+                .arg(&parent)
+                .spawn()
+                .map_err(|e| format!("打开文件夹失败: {}", e))?;
+        }
+    }
+    Ok(())
 }
 
 /// 获取歌手详情

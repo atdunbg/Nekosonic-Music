@@ -2,7 +2,7 @@
   <div
     data-tauri-drag-region
     class="h-10 flex items-center justify-between px-4 flex-shrink-0 select-none relative z-10"
-    :class="darkMode ? '' : 'bg-surface/90 backdrop-blur'"
+    :style="titleBarBgStyle"
   >
     <slot name="left">
       <span v-if="!darkMode" class="text-xs text-content-3 font-medium ml-2">Nekosonic Music</span>
@@ -16,15 +16,27 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { useSettingsStore } from '../stores/settings';
 
-defineProps<{
+const props = defineProps<{
   darkMode?: boolean;
+  transparent?: boolean;
 }>();
 
 defineEmits<{
   close: [];
 }>();
+
+const settings = useSettingsStore();
+
+const titleBarBgStyle = computed(() => {
+  if (props.transparent) return {};
+  if (settings.currentWallpaper.path) return {}; // 有壁纸时透明，由遮罩层统一提供背景
+  if (props.darkMode) return {};
+  return { backgroundColor: settings.currentColors.surface };
+});
 
 const currentWindow = getCurrentWindow();
 

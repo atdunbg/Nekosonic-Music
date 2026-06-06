@@ -1,5 +1,6 @@
 const cache = new Map<string, { data: any; ts: number }>();
-const TTL = 5 * 60 * 1000;
+const TTL = 30 * 60 * 1000;
+const MAX_ENTRIES = 30;
 
 export function pageCacheGet(key: string): any | null {
   const entry = cache.get(key);
@@ -12,6 +13,11 @@ export function pageCacheGet(key: string): any | null {
 }
 
 export function pageCacheSet(key: string, data: any) {
+  if (cache.size >= MAX_ENTRIES && !cache.has(key)) {
+    // 淘汰最旧的条目
+    const firstKey = cache.keys().next().value;
+    if (firstKey !== undefined) cache.delete(firstKey);
+  }
   cache.set(key, { data, ts: Date.now() });
 }
 

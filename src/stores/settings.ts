@@ -1,35 +1,9 @@
 import { defineStore } from 'pinia';
 import { ref, watch, computed } from 'vue';
+import { getPresetSkin, isPresetSkinId, applySkinColors, type SkinColors } from '../skins';
 
 export type AudioQuality = 'standard' | 'higher' | 'exhigh' | 'lossless' | 'hires';
-export type ThemeColor = 'blue' | 'green' | 'rose' | 'violet' | 'orange' | 'cyan' | 'pink';
-export type Appearance = 'dark' | 'light';
 export type CloseAction = 'ask' | 'minimize' | 'exit';
-
-export const themeLabels: Record<ThemeColor, string> = {
-  blue: '天蓝',
-  green: '翠绿',
-  rose: '玫红',
-  violet: '紫罗兰',
-  orange: '橙色',
-  cyan: '青色',
-  pink: '粉色',
-};
-
-export const themeColors: Record<ThemeColor, string> = {
-  blue: '#3b82f6',
-  green: '#22c55e',
-  rose: '#f43f5e',
-  violet: '#8b5cf6',
-  orange: '#f97316',
-  cyan: '#06b6d4',
-  pink: '#ec4899',
-};
-
-export const appearanceLabels: Record<Appearance, string> = {
-  dark: '深色',
-  light: '浅色',
-};
 
 export const qualityLabels: Record<AudioQuality, string> = {
   standard: '标准',
@@ -63,12 +37,31 @@ export const defaultShortcuts: Record<string, ShortcutBinding> = {
   globalVolDown: { key: 'Control+Alt+ArrowDown', label: '音量减小（全局）' },
 };
 
+export interface CustomSkin {
+  id: string;
+  name: string;
+  preview: string;
+  colors: SkinColors;
+  /** 壁纸图片路径，为空则使用纯色背景 */
+  wallpaper: string;
+  /** 壁纸模糊度 0-30 */
+  wallpaperBlur: number;
+  /** 壁纸透明度 0-1 */
+  wallpaperOpacity: number;
+}
+
+export interface MusicFolder {
+  path: string;
+  enabled: boolean;
+}
+
 interface SettingsData {
   audioQuality: AudioQuality;
   downloadPath: string;
-  localMusicPaths: string[];
-  theme: ThemeColor;
-  appearance: Appearance;
+  localMusicPaths: string[]; // 旧格式，迁移用
+  localMusicFolders: MusicFolder[];
+  skin: string; // 预设皮肤 id 或 custom-xxx
+  customSkins: CustomSkin[];
   closeAction: CloseAction;
   shortcuts: Record<string, ShortcutBinding>;
   outputDevice: string | null;
@@ -80,29 +73,43 @@ function loadSettings(): SettingsData {
     const raw = localStorage.getItem('app_settings');
     if (raw) {
       const parsed = JSON.parse(raw);
-      const theme = parsed.theme || parsed.accentColor || 'blue';
-      const validThemes: ThemeColor[] = ['blue', 'green', 'rose', 'violet', 'orange', 'cyan', 'pink'];
-      const validAppearances: Appearance[] = ['dark', 'light'];
-      const appearance = validAppearances.includes(parsed.appearance) ? parsed.appearance : 'dark';
-      if (parsed.theme && parsed.theme.startsWith('light-')) {
-        return {
-          audioQuality: parsed.audioQuality || 'standard',
-          downloadPath: parsed.downloadPath || '',
-          localMusicPaths: parsed.localMusicPaths || [],
-          theme: validThemes.includes(parsed.theme.slice(6)) ? parsed.theme.slice(6) : 'blue',
-          appearance: 'light',
-          closeAction: parsed.closeAction || 'ask',
-          shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
-          outputDevice: parsed.outputDevice || null,
-          volume: typeof parsed.volume === 'number' ? parsed.volume : 100,
-        };
+
+      // 迁移旧版 theme + appearance → skin
+      let skin = parsed.skin || 'dark-blue';
+      if (!parsed.skin && (parsed.theme || parsed.appearance)) {
+        const appearance = parsed.appearance || 'dark';
+        const theme = parsed.theme || 'blue';
+        const validThemes = ['blue', 'green', 'rose', 'violet', 'orange', 'cyan', 'pink'];
+        const t = validThemes.includes(theme) ? theme : 'blue';
+        skin = appearance === 'light' ? `light-${t}` : `dark-${t}`;
       }
+
+      // 迁移旧版全局壁纸 → 移入自定义皮肤（如果有自定义皮肤且没有壁纸）
+      let customSkins = parsed.customSkins || [];
+      if (parsed.wallpaper && customSkins.length > 0) {
+        customSkins = customSkins.map((s: any) => {
+          if (!s.wallpaper) {
+            return { ...s, wallpaper: parsed.wallpaper, wallpaperBlur: parsed.wallpaperBlur ?? 10, wallpaperOpacity: parsed.wallpaperOpacity ?? 0.3 };
+          }
+          return s;
+        });
+      }
+
+      // 迁移旧格式 localMusicPaths → localMusicFolders
+      let folders: MusicFolder[] = (parsed.localMusicFolders || []).map((f: any) =>
+        typeof f === 'string' ? { path: f, enabled: true } : f
+      );
+      if (!parsed.localMusicFolders && parsed.localMusicPaths?.length) {
+        folders = parsed.localMusicPaths.map((p: string) => ({ path: p, enabled: true }));
+      }
+
       return {
         audioQuality: parsed.audioQuality || 'standard',
         downloadPath: parsed.downloadPath || '',
-        localMusicPaths: parsed.localMusicPaths || [],
-        theme: validThemes.includes(theme) ? theme : 'blue',
-        appearance,
+        localMusicPaths: [],
+        localMusicFolders: folders,
+        skin,
+        customSkins,
         closeAction: parsed.closeAction || 'ask',
         shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
         outputDevice: parsed.outputDevice || null,
@@ -114,8 +121,9 @@ function loadSettings(): SettingsData {
     audioQuality: 'standard',
     downloadPath: '',
     localMusicPaths: [],
-    theme: 'blue',
-    appearance: 'dark',
+    localMusicFolders: [],
+    skin: 'dark-blue',
+    customSkins: [],
     closeAction: 'ask',
     shortcuts: { ...defaultShortcuts },
     outputDevice: null,
@@ -128,17 +136,98 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const audioQuality = ref<AudioQuality>(saved.audioQuality);
   const downloadPath = ref<string>(saved.downloadPath);
-  const localMusicPaths = ref<string[]>(saved.localMusicPaths);
-  const theme = ref<ThemeColor>(saved.theme);
-  const appearance = ref<Appearance>(saved.appearance);
+  const localMusicFolders = ref<MusicFolder[]>(saved.localMusicFolders);
+  const skin = ref<string>(saved.skin);
+  const customSkins = ref<CustomSkin[]>(saved.customSkins);
   const closeAction = ref<CloseAction>(saved.closeAction || 'ask');
   const shortcuts = ref<Record<string, ShortcutBinding>>(saved.shortcuts);
   const outputDevice = ref<string | null>(saved.outputDevice);
   const volume = ref<number>(saved.volume);
 
-  const dataTheme = computed(() =>
-    appearance.value === 'light' ? `light-${theme.value}` : theme.value
-  );
+  /** 当前皮肤是否为预设皮肤 */
+  const isPreset = computed(() => isPresetSkinId(skin.value));
+
+  /** 获取当前自定义皮肤 */
+  const currentCustomSkin = computed(() => {
+    if (isPreset.value) return null;
+    return customSkins.value.find(s => s.id === skin.value) || null;
+  });
+
+  /** 获取当前皮肤的预览色 */
+  const skinPreview = computed(() => {
+    if (isPreset.value) {
+      return getPresetSkin(skin.value)?.preview || '#3b82f6';
+    }
+    return currentCustomSkin.value?.preview || '#3b82f6';
+  });
+
+  /** 获取当前皮肤的完整颜色集（响应式） */
+  const currentColors = computed<SkinColors>(() => {
+    if (isPreset.value) {
+      return getPresetSkin(skin.value)!.colors;
+    }
+    const custom = currentCustomSkin.value;
+    if (!custom) {
+      return getPresetSkin('dark-blue')!.colors;
+    }
+    return custom.colors;
+  });
+
+  /** 获取当前皮肤的壁纸信息 */
+  const currentWallpaper = computed(() => {
+    if (isPreset.value) return { path: '', blur: 10, opacity: 0.3 };
+    const custom = currentCustomSkin.value;
+    return {
+      path: custom?.wallpaper || '',
+      blur: custom?.wallpaperBlur ?? 10,
+      opacity: custom?.wallpaperOpacity ?? 0.3,
+    };
+  });
+
+  function setSkin(id: string) {
+    skin.value = id;
+  }
+
+  function addCustomSkin(s: CustomSkin) {
+    customSkins.value = [...customSkins.value, s];
+    skin.value = s.id;
+  }
+
+  function updateCustomSkin(id: string, updates: Partial<CustomSkin>) {
+    customSkins.value = customSkins.value.map(s =>
+      s.id === id ? { ...s, ...updates } : s
+    );
+    // 如果正在使用该皮肤，立即刷新 CSS 变量
+    if (skin.value === id) {
+      applySkin();
+    }
+  }
+
+  function removeCustomSkin(id: string) {
+    customSkins.value = customSkins.value.filter(s => s.id !== id);
+    if (skin.value === id) {
+      skin.value = 'dark-blue';
+    }
+  }
+
+  /** 应用当前皮肤到 DOM（统一通过 JS 设置 CSS 变量） */
+  function applySkin() {
+    let colors: SkinColors;
+    if (isPreset.value) {
+      const preset = getPresetSkin(skin.value);
+      colors = preset!.colors;
+    } else {
+      const custom = currentCustomSkin.value;
+      if (!custom) {
+        // 找不到自定义皮肤，回退到默认
+        skin.value = 'dark-blue';
+        colors = getPresetSkin('dark-blue')!.colors;
+      } else {
+        colors = custom.colors;
+      }
+    }
+    applySkinColors(colors);
+  }
 
   function setAudioQuality(q: AudioQuality) {
     audioQuality.value = q;
@@ -149,22 +238,25 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function addLocalMusicPath(p: string) {
-    if (!localMusicPaths.value.includes(p)) {
-      localMusicPaths.value = [...localMusicPaths.value, p];
+    if (!localMusicFolders.value.some(f => f.path === p)) {
+      localMusicFolders.value = [...localMusicFolders.value, { path: p, enabled: true }];
     }
   }
 
   function removeLocalMusicPath(p: string) {
-    localMusicPaths.value = localMusicPaths.value.filter(v => v !== p);
+    localMusicFolders.value = localMusicFolders.value.filter(f => f.path !== p);
   }
 
-  function setTheme(t: ThemeColor) {
-    theme.value = t;
+  function toggleLocalMusicFolder(p: string) {
+    localMusicFolders.value = localMusicFolders.value.map(f =>
+      f.path === p ? { ...f, enabled: !f.enabled } : f
+    );
   }
 
-  function setAppearance(a: Appearance) {
-    appearance.value = a;
-  }
+  /** 已启用的扫描路径 */
+  const enabledMusicPaths = computed(() =>
+    localMusicFolders.value.filter(f => f.enabled).map(f => f.path)
+  );
 
   function setCloseAction(a: CloseAction) {
     closeAction.value = a;
@@ -185,22 +277,23 @@ export const useSettingsStore = defineStore('settings', () => {
   function resetAll() {
     audioQuality.value = 'standard';
     downloadPath.value = '';
-    localMusicPaths.value = [];
-    theme.value = 'blue';
-    appearance.value = 'dark';
+    localMusicFolders.value = [];
+    skin.value = 'dark-blue';
+    customSkins.value = [];
     closeAction.value = 'ask';
     shortcuts.value = { ...defaultShortcuts };
     outputDevice.value = null;
     volume.value = 100;
   }
 
-  watch([audioQuality, downloadPath, localMusicPaths, theme, appearance, closeAction, shortcuts, outputDevice, volume], () => {
+  watch([audioQuality, downloadPath, localMusicFolders, skin, customSkins, closeAction, shortcuts, outputDevice, volume], () => {
     const data: SettingsData = {
       audioQuality: audioQuality.value,
       downloadPath: downloadPath.value,
-      localMusicPaths: localMusicPaths.value,
-      theme: theme.value,
-      appearance: appearance.value,
+      localMusicPaths: [],
+      localMusicFolders: localMusicFolders.value,
+      skin: skin.value,
+      customSkins: customSkins.value,
       closeAction: closeAction.value,
       shortcuts: shortcuts.value,
       outputDevice: outputDevice.value,
@@ -212,20 +305,29 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     audioQuality,
     downloadPath,
-    localMusicPaths,
-    theme,
-    appearance,
-    dataTheme,
+    localMusicFolders,
+    enabledMusicPaths,
+    skin,
+    customSkins,
+    isPreset,
+    currentCustomSkin,
+    currentColors,
+    skinPreview,
+    currentWallpaper,
     closeAction,
     shortcuts,
     outputDevice,
     volume,
+    setSkin,
+    addCustomSkin,
+    updateCustomSkin,
+    removeCustomSkin,
+    applySkin,
     setAudioQuality,
     setDownloadPath,
     addLocalMusicPath,
     removeLocalMusicPath,
-    setTheme,
-    setAppearance,
+    toggleLocalMusicFolder,
     setCloseAction,
     setOutputDevice,
     setShortcut,

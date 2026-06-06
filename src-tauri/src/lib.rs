@@ -197,6 +197,8 @@ pub fn run() {
             api::user_cloud_detail,
             api::user_cloud_del,
             api::cloud_upload,
+            api::read_image_as_data_url,
+            api::show_item_in_folder,
         ])
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

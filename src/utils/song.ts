@@ -5,6 +5,8 @@ export interface Song {
   al: { id?: number; picUrl: string; name?: string };
   dt?: number;
   localPath?: string;
+  alg?: string;
+  br?: number;
 }
 
 export function normalizeSong(song: any): Song {
@@ -13,7 +15,9 @@ export function normalizeSong(song: any): Song {
     picUrl: song.al?.picUrl || song.album?.picUrl || '',
     name: song.al?.name || song.album?.name,
   };
-  const ar = (song.ar && song.ar.length > 0) ? song.ar : (song.artists || []);
+  const rawAr = (song.ar && song.ar.length > 0) ? song.ar : (song.artists || []);
+  // 过滤掉 id 和 name 同时不存在的歌手（下线艺人等）
+  const ar = rawAr.filter((a: any) => a.name);
   let dt = song.dt || song.duration || 0;
   if (dt < 100 || dt > 7200000) dt = 0;
   return {
@@ -23,6 +27,8 @@ export function normalizeSong(song: any): Song {
     al,
     dt,
     localPath: song.localPath,
+    alg: song.alg || undefined,
+    br: song.br || undefined,
   };
 }
 
@@ -34,7 +40,21 @@ export function getCoverUrl(song: Song | null, sizeParam = ''): string {
   return raw + sizeParam;
 }
 
+export function getArtistDisplay(song: Song): string {
+  if (!song.ar || song.ar.length === 0) return '未知歌手';
+  const names = song.ar
+    .filter(a => a.id != null && a.name)
+    .map(a => a.name);
+  return names.length > 0 ? names.join(' / ') : '未知歌手';
+}
+
+export function getAlbumDisplay(song: Song): string {
+  if (!song.al?.id || !song.al?.name) return '未知专辑';
+  return song.al.name;
+}
+
 const colorCache = new Map<string, string>();
+const MAX_COLOR_CACHE = 200;
 
 export function extractDominantColor(imageUrl: string): Promise<string> {
   if (colorCache.has(imageUrl)) {
@@ -67,6 +87,10 @@ export function extractDominantColor(imageUrl: string): Promise<string> {
         b = Math.round(b / count);
 
         const color = `rgb(${r}, ${g}, ${b})`;
+        if (colorCache.size >= MAX_COLOR_CACHE) {
+          const firstKey = colorCache.keys().next().value;
+          if (firstKey !== undefined) colorCache.delete(firstKey);
+        }
         colorCache.set(imageUrl, color);
         resolve(color);
       } catch {

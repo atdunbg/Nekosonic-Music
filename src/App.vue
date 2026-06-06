@@ -1,5 +1,24 @@
 <template>
-  <div class="flex flex-col h-screen bg-base text-content overflow-hidden">
+  <!-- 壁纸层：fixed 全屏最底层 -->
+  <div
+    v-if="settings.currentWallpaper.path"
+    class="fixed inset-0 z-0 pointer-events-none overflow-hidden"
+  >
+    <div
+      class="absolute inset-[-20px] bg-cover bg-center bg-no-repeat"
+      :style="wallpaperStyle"
+    ></div>
+  </div>
+
+  <!-- 主题色遮罩层：半透明主题色覆盖壁纸，保证文字可读 -->
+  <div
+    v-if="settings.currentWallpaper.path"
+    class="fixed inset-0 z-[1] pointer-events-none"
+    :style="overlayStyle"
+  ></div>
+
+  <!-- 主容器 -->
+  <div class="flex flex-col h-screen text-content overflow-hidden relative z-[2]" :style="rootBgStyle">
     <TitleBar @close="closeWindow" />
 
     <div class="flex flex-1 overflow-hidden" v-if="windowVisible">
@@ -37,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useUserStore } from './stores/user';
 import { useSettingsStore, type CloseAction } from './stores/settings';
@@ -56,6 +75,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
 import { MusicApi, AudioApi, DeviceApi, AppApi } from './api';
+import { hexToRgba } from './utils/color';
 
 const userStore = useUserStore();
 const player = usePlayerStore();
@@ -84,7 +104,7 @@ const ROUTE_COMPONENT: Record<string, string> = {
 };
 const ALL_CACHEABLE = [...new Set(Object.values(ROUTE_COMPONENT))];
 const PERMANENT = new Set(['FavoriteSongsView']);
-const CACHE_TTL = 30_000;
+const CACHE_TTL = 300_000;
 
 const lastActivatedAt: Record<string, number> = {};
 const navStack = ref<string[]>([]);
@@ -125,9 +145,56 @@ let cleanupTimer: ReturnType<typeof setInterval>;
 function startCleanup() { cleanupTimer = setInterval(() => { keepAliveInclude.value = computeInclude(); }, 10_000); }
 function stopCleanup() { clearInterval(cleanupTimer); }
 
-watch(() => settings.dataTheme, (val) => {
-  document.documentElement.setAttribute('data-theme', val);
+watch(() => settings.skin, () => {
+  settings.applySkin();
 }, { immediate: true });
+
+// 壁纸样式：通过 Rust 命令读取本地图片转 base64 data URL
+const wallpaperDataUrl = ref('');
+const wallpaperStyle = computed(() => {
+  if (!wallpaperDataUrl.value) return {};
+  const wp = settings.currentWallpaper;
+  return {
+    backgroundImage: `url(${wallpaperDataUrl.value})`,
+    filter: `blur(${wp.blur}px)`,
+    opacity: wp.opacity,
+  };
+});
+
+// 监听壁纸路径变化，异步加载图片
+watch(() => settings.currentWallpaper.path, async (path) => {
+  if (!path) {
+    wallpaperDataUrl.value = '';
+    return;
+  }
+  try {
+    wallpaperDataUrl.value = await AppApi.readImageAsDataUrl(path);
+  } catch (e) {
+    console.error('加载壁纸失败:', e);
+    wallpaperDataUrl.value = '';
+  }
+}, { immediate: true });
+
+// 根容器背景：有壁纸时透明（遮罩层已保证文字可读），无壁纸时不透明
+const rootBgStyle = computed(() => {
+  const wp = settings.currentWallpaper;
+  if (wp.path) {
+    return {}; // 透明，遮罩层统一处理
+  }
+  return {
+    backgroundColor: 'var(--c-bg)',
+  };
+});
+
+// 主题色遮罩层：用 --c-bg 的半透明版本覆盖壁纸，保证文字对比度
+// 这是网易云式设计的核心：壁纸色调透出遮罩，文字始终清晰
+const overlayStyle = computed(() => {
+  const bgColor = settings.currentColors.bg;
+  const rgba = hexToRgba(bgColor, 0.82);
+  return {
+    backgroundColor: rgba,
+  };
+});
 
 watch(() => userStore.isLoggedIn, (val) => {
   if (val) {

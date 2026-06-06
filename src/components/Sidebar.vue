@@ -1,5 +1,5 @@
 <template>
-  <nav class="w-56 flex-shrink-0 flex flex-col bg-surface/80 backdrop-blur">
+  <nav class="w-56 flex-shrink-0 flex flex-col" :style="sidebarBgStyle">
     <div class="flex-1 p-4 overflow-y-auto min-h-0">
       <div class="flex flex-col min-h-full">
         <div class="space-y-0.5">
@@ -126,10 +126,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useUserStore } from '../stores/user';
 import { usePlayerStore } from '../stores/player';
+import { useSettingsStore } from '../stores/settings';
 import { MusicApi } from '../api';
 import IconHome from '~icons/lucide/home';
 import IconSearch from '~icons/lucide/search';
@@ -147,6 +148,13 @@ const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const player = usePlayerStore();
+const settings = useSettingsStore();
+
+// 有壁纸时侧栏轻微半透明区分区域，无壁纸时保持原样
+const sidebarBgStyle = computed(() => {
+  if (settings.currentWallpaper.path) return {}; // 有壁纸时透明，由遮罩层统一提供背景
+  return { backgroundColor: settings.currentColors.surface };
+});
 
 const createdPlaylists = ref<any[]>([]);
 const subPlaylists = ref<any[]>([]);

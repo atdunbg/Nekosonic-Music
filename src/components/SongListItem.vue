@@ -1,5 +1,5 @@
 <template>
-  <div :class="['flex items-center gap-4 p-3 rounded-xl cursor-pointer transition group', containerClass]">
+  <div :class="['flex items-center gap-4 p-3 rounded-xl cursor-pointer transition group', isCurrent ? 'bg-accent-dim hover:bg-accent-dim' : containerClass]">
     <slot name="index" :index="index" :is-current="isCurrent">
       <div v-if="showIndex" class="w-6 text-right flex-shrink-0 flex items-center justify-end h-5">
         <div v-if="isCurrent && showPlayingOverlay" class="flex items-center justify-end">

@@ -23,30 +23,25 @@
       <p class="text-content-2 text-sm">加载失败</p>
       <button @click="loadData(true)" class="px-4 py-2 bg-subtle hover:bg-muted rounded-lg text-sm transition">重试</button>
     </div>
-    <div v-else class="space-y-2">
-      <SongListItem
-        v-for="(song, index) in songs"
-        :key="song.id"
-        :song="song"
-        :index="index"
-        :is-current="isCurrentSong(song.id)"
-        show-index
-        show-like
-        show-download
-        show-menu
-        show-duration
-        show-playing-overlay
-        :container-class="isCurrentSong(song.id) ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
-        @click="player.playFromList(songs, index)"
-      />
-    </div>
+    <VirtualSongList
+      v-else
+      :songs="songs"
+      :current-song-id="player.currentSong?.id"
+      show-index
+      show-like
+      show-download
+      show-menu
+      show-duration
+      show-playing-overlay
+      @song-click="(_s, i) => player.playFromList(songs, i)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onActivated, watch } from 'vue';
 import { MusicApi } from '../api';
-import SongListItem from '../components/SongListItem.vue';
+import VirtualSongList from '../components/VirtualSongList.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { usePlayerStore } from '../stores/player';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
@@ -58,10 +53,6 @@ const player = usePlayerStore();
 const songs = ref<Song[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
-
-function isCurrentSong(songId: number): boolean {
-  return player.currentSong?.id === songId;
-}
 
 async function loadData(force = false) {
   if (!force) {

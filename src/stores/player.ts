@@ -44,6 +44,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   const recentLocal = ref<Song[]>(loadRecentLocal());
   const MAX_RECENT = 200;
+  let recentLocalTimer: ReturnType<typeof setTimeout> | undefined;
 
   const likedIds = ref<Set<number>>(new Set());
 
@@ -102,7 +103,10 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   watch(recentLocal, (val) => {
-    localStorage.setItem('recent_local', JSON.stringify(val));
+    clearTimeout(recentLocalTimer);
+    recentLocalTimer = setTimeout(() => {
+      localStorage.setItem('recent_local', JSON.stringify(val));
+    }, 2000);
   }, { deep: true });
 
   const isFmMode = ref(false);
@@ -114,25 +118,41 @@ export const usePlayerStore = defineStore('player', () => {
 
   let lastScrobbleId: number | null = null;
   let lastScrobbleStartTime: number = 0;
+  let lastScrobbleAlg: string | undefined;
+  let lastScrobbleSource: string | undefined;
+  let lastScrobbleBitrate: number | undefined;
 
+  /// 上报上一首歌的听歌记录（scrobble），然后记录当前歌的开始时间
   function reportScrobble() {
-    const song = currentSong.value;
-    if (!song || song.localPath || song.id == null) {
-      lastScrobbleId = null;
-      return;
-    }
-    if (lastScrobbleId === song.id && lastScrobbleStartTime > 0) {
+    // 先上报：如果有正在记录的歌曲且播放超过 5 秒，发送 scrobble
+    if (lastScrobbleId != null && lastScrobbleStartTime > 0) {
       const playedSec = Math.round((Date.now() - lastScrobbleStartTime) / 1000);
       if (playedSec > 5 && navigator.onLine) {
         MusicApi.scrobble({
-          id: song.id,
-          sourceid: isFmMode.value ? String(song.id) : '',
+          id: lastScrobbleId,
+          sourceid: isFmMode.value ? String(lastScrobbleId) : '',
           time: playedSec,
+          alg: lastScrobbleAlg || '',
+          source: lastScrobbleSource || 'list',
+          bitrate: lastScrobbleBitrate || 0,
         }).catch(() => {});
       }
     }
-    lastScrobbleId = song.id;
-    lastScrobbleStartTime = Date.now();
+    // 再记录：当前歌曲作为新的 scrobble 起点
+    const song = currentSong.value;
+    if (!song || song.localPath || song.id == null) {
+      lastScrobbleId = null;
+      lastScrobbleStartTime = 0;
+      lastScrobbleAlg = undefined;
+      lastScrobbleSource = undefined;
+      lastScrobbleBitrate = undefined;
+    } else {
+      lastScrobbleId = song.id;
+      lastScrobbleStartTime = Date.now();
+      lastScrobbleAlg = song.alg;
+      lastScrobbleSource = isFmMode.value ? 'personal_fm' : 'list';
+      lastScrobbleBitrate = song.br;
+    }
   }
 
   function enableFmMode(onNext: () => void) {
@@ -212,7 +232,29 @@ export const usePlayerStore = defineStore('player', () => {
       if (seq !== _playSeq) return;
       const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
-      if (!url) throw new Error('无播放源');
+      if (!url) {
+        const fee = data.fee;
+        if (fee === 4) {
+          showToast(`${song.name} 为数字专辑，已跳过`, 'info');
+        } else if (fee === 1) {
+          showToast(`${song.name} 为 VIP 专属歌曲，已跳过`, 'info');
+        } else {
+          showToast(`${song.name} 暂无播放源`, 'info');
+        }
+        fmVipSkipCount++;
+        if (fmVipSkipCount >= MAX_FM_VIP_SKIP) {
+          fmVipSkipCount = 0;
+          disableFmMode();
+          return;
+        }
+        _switchingSong = false;
+        if (fmNextCallback) {
+          fmNextCallback();
+        } else {
+          disableFmMode();
+        }
+        return;
+      }
 
       if (data.freeTrialInfo) {
         console.warn('FM VIP 试听歌曲，自动跳过', song.name);
@@ -372,7 +414,22 @@ export const usePlayerStore = defineStore('player', () => {
       const url: string | undefined = data.url;
 
       if (!url) {
-        console.error('未获取到有效播放地址', song);
+        // url 为空：可能是数字专辑/付费歌曲，根据 fee 字段判断
+        const fee = data.fee;
+        if (fee === 4) {
+          showToast(`${song.name} 为数字专辑，需购买后播放`, 'info');
+        } else if (fee === 1) {
+          showToast(`${song.name} 为 VIP 专属歌曲`, 'info');
+        } else {
+          showToast(`${song.name} 暂无播放源`, 'info');
+        }
+        vipSkipCount++;
+        if (vipSkipCount >= MAX_VIP_SKIP) {
+          vipSkipCount = 0;
+          return;
+        }
+        _switchingSong = false;
+        next();
         return;
       }
 
@@ -478,7 +535,7 @@ export const usePlayerStore = defineStore('player', () => {
             }
           } catch { /* 忽略 */ }
 
-          if (stateSyncCounter >= 8) {
+          if (stateSyncCounter >= 4) {
             stateSyncCounter = 0;
             try {
               const backendPlaying = await AudioApi.isAudioPlaying();
@@ -489,7 +546,7 @@ export const usePlayerStore = defineStore('player', () => {
           }
         } else {
           if (!backendFrozen) {
-            const next = currentTime.value + 0.25;
+            const next = currentTime.value + 0.5;
             if (next <= duration.value) {
               currentTime.value = next;
             }
@@ -499,7 +556,7 @@ export const usePlayerStore = defineStore('player', () => {
           currentTime.value = duration.value;
         }
       }
-    }, 250));
+    }, 500));
   }
 
   async function toggle() {

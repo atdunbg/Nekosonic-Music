@@ -62,23 +62,18 @@
     </div>
 
     <!-- 歌曲列表 -->
-    <div v-else-if="songs.length" class="space-y-1">
-      <SongListItem
-        v-for="(song, index) in songs"
-        :key="song.id"
-        :song="song"
-        :index="index"
-        :is-current="player.currentSong?.id === song.id"
-        show-index
-        show-like
-        show-download
-        show-menu
-        show-duration
-        show-playing-overlay
-        :container-class="player.currentSong?.id === song.id ? 'bg-accent-dim hover:bg-accent-dim' : 'hover:bg-subtle'"
-        @click="player.playFromList(songs, index)"
-      />
-    </div>
+    <VirtualSongList
+      v-else-if="songs.length"
+      :songs="songs"
+      :current-song-id="player.currentSong?.id"
+      show-index
+      show-like
+      show-download
+      show-menu
+      show-duration
+      show-playing-overlay
+      @song-click="(_s, i) => player.playFromList(songs, i)"
+    />
   </div>
 </template>
 
@@ -90,7 +85,7 @@ import { usePlayerStore } from '../stores/player';
 import { normalizeSong, type Song } from '../utils/song';
 import { formatDate } from '../utils/format';
 import { pageCacheGet, pageCacheSet } from '../composables/usePageCache';
-import SongListItem from '../components/SongListItem.vue';
+import VirtualSongList from '../components/VirtualSongList.vue';
 import PageHeader from '../components/PageHeader.vue';
 import IconPlay from '~icons/lucide/play';
 
