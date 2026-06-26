@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, watch, computed } from 'vue';
 import { getPresetSkin, isPresetSkinId, applySkinColors, type SkinColors } from '../skins';
+import { migrateSettings, CURRENT_SCHEMA_VERSION } from './migrations/settingsMigrations';
 
 export type AudioQuality = 'standard' | 'higher' | 'exhigh' | 'lossless' | 'hires';
 export type CloseAction = 'ask' | 'minimize' | 'exit';
@@ -58,7 +59,6 @@ export interface MusicFolder {
 interface SettingsData {
   audioQuality: AudioQuality;
   downloadPath: string;
-  localMusicPaths: string[]; // 旧格式，迁移用
   localMusicFolders: MusicFolder[];
   skin: string; // 预设皮肤 id 或 custom-xxx
   customSkins: CustomSkin[];
@@ -66,61 +66,13 @@ interface SettingsData {
   shortcuts: Record<string, ShortcutBinding>;
   outputDevice: string | null;
   volume: number;
+  schemaVersion: number;
 }
 
 function loadSettings(): SettingsData {
-  try {
-    const raw = localStorage.getItem('app_settings');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-
-      // 迁移旧版 theme + appearance → skin
-      let skin = parsed.skin || 'dark-blue';
-      if (!parsed.skin && (parsed.theme || parsed.appearance)) {
-        const appearance = parsed.appearance || 'dark';
-        const theme = parsed.theme || 'blue';
-        const validThemes = ['blue', 'green', 'rose', 'violet', 'orange', 'cyan', 'pink'];
-        const t = validThemes.includes(theme) ? theme : 'blue';
-        skin = appearance === 'light' ? `light-${t}` : `dark-${t}`;
-      }
-
-      // 迁移旧版全局壁纸 → 移入自定义皮肤（如果有自定义皮肤且没有壁纸）
-      let customSkins = parsed.customSkins || [];
-      if (parsed.wallpaper && customSkins.length > 0) {
-        customSkins = customSkins.map((s: any) => {
-          if (!s.wallpaper) {
-            return { ...s, wallpaper: parsed.wallpaper, wallpaperBlur: parsed.wallpaperBlur ?? 10, wallpaperOpacity: parsed.wallpaperOpacity ?? 0.3 };
-          }
-          return s;
-        });
-      }
-
-      // 迁移旧格式 localMusicPaths → localMusicFolders
-      let folders: MusicFolder[] = (parsed.localMusicFolders || []).map((f: any) =>
-        typeof f === 'string' ? { path: f, enabled: true } : f
-      );
-      if (!parsed.localMusicFolders && parsed.localMusicPaths?.length) {
-        folders = parsed.localMusicPaths.map((p: string) => ({ path: p, enabled: true }));
-      }
-
-      return {
-        audioQuality: parsed.audioQuality || 'standard',
-        downloadPath: parsed.downloadPath || '',
-        localMusicPaths: [],
-        localMusicFolders: folders,
-        skin,
-        customSkins,
-        closeAction: parsed.closeAction || 'ask',
-        shortcuts: { ...defaultShortcuts, ...(parsed.shortcuts || {}) },
-        outputDevice: parsed.outputDevice || null,
-        volume: typeof parsed.volume === 'number' ? parsed.volume : 100,
-      };
-    }
-  } catch { /* 忽略 */ }
-  return {
+  const defaults: SettingsData = {
     audioQuality: 'standard',
     downloadPath: '',
-    localMusicPaths: [],
     localMusicFolders: [],
     skin: 'dark-blue',
     customSkins: [],
@@ -128,7 +80,31 @@ function loadSettings(): SettingsData {
     shortcuts: { ...defaultShortcuts },
     outputDevice: null,
     volume: 100,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
   };
+
+  try {
+    const raw = localStorage.getItem('app_settings');
+    if (!raw) return defaults;
+
+    const parsed = JSON.parse(raw);
+    // 执行迁移（theme→skin、wallpaper→customSkin、localMusicPaths→localMusicFolders）
+    const migrated = migrateSettings(parsed);
+
+    return {
+      audioQuality: migrated.audioQuality || defaults.audioQuality,
+      downloadPath: migrated.downloadPath || defaults.downloadPath,
+      localMusicFolders: Array.isArray(migrated.localMusicFolders) ? migrated.localMusicFolders : defaults.localMusicFolders,
+      skin: migrated.skin || defaults.skin,
+      customSkins: Array.isArray(migrated.customSkins) ? migrated.customSkins : defaults.customSkins,
+      closeAction: migrated.closeAction || defaults.closeAction,
+      shortcuts: { ...defaultShortcuts, ...(migrated.shortcuts || {}) },
+      outputDevice: migrated.outputDevice ?? null,
+      volume: typeof migrated.volume === 'number' ? migrated.volume : defaults.volume,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+    };
+  } catch { /* 忽略 */ }
+  return defaults;
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -290,7 +266,6 @@ export const useSettingsStore = defineStore('settings', () => {
     const data: SettingsData = {
       audioQuality: audioQuality.value,
       downloadPath: downloadPath.value,
-      localMusicPaths: [],
       localMusicFolders: localMusicFolders.value,
       skin: skin.value,
       customSkins: customSkins.value,
@@ -298,6 +273,7 @@ export const useSettingsStore = defineStore('settings', () => {
       shortcuts: shortcuts.value,
       outputDevice: outputDevice.value,
       volume: volume.value,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
     };
     localStorage.setItem('app_settings', JSON.stringify(data));
   }, { deep: true });

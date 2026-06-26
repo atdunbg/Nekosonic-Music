@@ -17,8 +17,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useSettingsStore } from '../stores/settings';
+import { minimizeWindow, toggleMaximize } from '../composables/useWindowControls';
 
 const props = defineProps<{
   darkMode?: boolean;
@@ -37,19 +37,4 @@ const titleBarBgStyle = computed(() => {
   if (props.darkMode) return {};
   return { backgroundColor: settings.currentColors.surface };
 });
-
-const currentWindow = getCurrentWindow();
-
-function minimizeWindow() {
-  currentWindow.minimize();
-}
-
-async function toggleMaximize() {
-  const isMaximized = await currentWindow.isMaximized();
-  if (isMaximized) {
-    currentWindow.unmaximize();
-  } else {
-    currentWindow.maximize();
-  }
-}
 </script>

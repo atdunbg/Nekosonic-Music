@@ -92,7 +92,7 @@ async function fetchComments(reset = false) {
     }
     hasMore.value = list.length >= pageSize
   } catch (e) {
-    console.error(e)
+    console.error('获取评论列表失败', e)
   } finally {
     loading.value = false
     loadingMore.value = false
@@ -123,7 +123,7 @@ async function likeComment(cid: number) {
     target.liked = !liked
     target.likedCount += liked ? -1 : 1
   } catch (e) {
-    console.error(e)
+    console.error('评论点赞失败', e)
   } finally {
     likingSet.value.delete(cid)
   }

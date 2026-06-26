@@ -1,3 +1,64 @@
+## v0.8.0
+
+本次版本为架构重构与交互升级版本，涵盖皮肤系统、详情页架构、侧边栏交互、播放器稳定性、底层模块拆分等方面的系统性优化。
+
+### ✨ 新功能
+- **皮肤系统重构**：新增 `skins.ts` 模块，定义 `SkinColors` 色板（bg/surface/subtle/muted/emphasis/content×4/line×2/accent×4/danger×2/warning/info 共 19 个语义色），通过 `applySkinColors()` 写入 CSS 变量到 `document.documentElement`。内置 14 套预设皮肤（7 色 × 深浅），支持自定义皮肤（颜色 + 壁纸 + 模糊度 + 透明度）
+- **设置页皮肤模块**：Settings.vue 新增「皮肤」分区——深浅外观切换、7 色主题色选择、自定义皮肤网格（带壁纸预览）、皮肤编辑器（19 个颜色色板 + 壁纸选择 + 模糊/透明度滑杆）。壁纸通过 Rust 命令读取本地图片转 data URL 渲染
+- **顶栏导航**：新增 TopBar 组件，集成前进/后退按钮和搜索框，前进后退按钮仅在与主内容区对齐的位置显示，搜索可直接在顶栏输入，无需再点击搜索选项
+- **可折叠侧边栏**：侧边栏支持展开/折叠/抽屉三种模式，折叠时仅显示图标，窗口过窄自动切换为抽屉模式。折叠/展开触发条采用 SPlayer 风格的双竖条设计，hover 时通过 ±12deg 旋转形成方向箭头（参考 naive-ui n-layout-toggle-bar）
+- **折叠态歌单浮层**：侧边栏折叠后，hover「我的歌单」「收藏的歌单」图标弹出浮层显示歌单列表，通过 Teleport 渲染到 body 避免被裁剪。浮层高度动态计算，底部永不越过 PlayerBar
+- **首页内容扩展**：首页新增「新歌速递」「热门歌手」「新碟上架」三个区块，配合原有的「推荐歌单」「每日推荐」「热门歌单」，共 6 个内容区块
+- **通用卡片组件**：新增 PlaylistCard、ArtistCard、AlbumCard、SectionHeader、CardGrid 五个可复用卡片组件，统一封面、标题、副标题、悬浮播放按钮的展示风格
+- **虚拟歌曲列表**：新增 VirtualSongList 组件，复用 SongListItem 并支持自定义配置
+- **推荐 API**：后端新增 personalized、personalized_newsong、top_artists、top_song、album_newest 五个 Tauri 命令，前端新增 rec.ts API 模块
+- **详情页统一架构**：新增 DetailLayout 组件，统一歌单/专辑/歌手三个详情页布局——头部常驻 + 内容独立滚动 + 滚动触发紧凑态（参考 SPlayer ListDetail/useListScroll）。`absolute;inset:0` 脱离主滚动流，flex 列布局让 header `flex-shrink:0` 不被带走，content `flex-1 min-h:0` 独立滚动
+- **紧凑态动画**：滚动列表超过 10px 时触发头部收缩，封面/标题缩小、元信息折叠隐藏、按钮缩小，所有过渡统一 `cubic-bezier(0.4, 0, 0.2, 1)` 0.3s，参考 SPlayer `.small` 类行为
+- **歌曲/评论 tab 切换**：三个详情页头部均加入歌曲/评论（或热门歌曲/专辑）tab 切换。songs 用 `v-if` 仅激活时渲染，comments 用「首次激活后保活」模式（`v-if` 控制挂载 + `v-show` 控制显示），保留滚动位置且不提前发起评论 API 请求
+- **专辑模糊搜索**：专辑详情页头部加入模糊搜索框，按歌名/歌手/专辑名实时过滤歌曲列表，播放全部时只播过滤结果
+- **本地音乐多文件夹管理**：本地音乐支持添加多个扫描文件夹，每条可独立启用/禁用/移除，扫描时跳过禁用文件夹
+
+### 🐛 修复
+- **个性化推荐错乱**：首页聚合缓存在未登录时生成，登录后未清除导致「依据口味推荐」显示的全站数据。改为登录/登出时清除首页缓存并重新加载，区分登录态调用 `recommend_resource`（个性化）和 `personalized`（全站）
+- **播放竞态条件**：切歌、播放/暂停、拖动进度条等异步操作可能产生竞态冲突。引入序列号（`_playSeq`）和状态锁（`_switchingSong`）防护
+- **拖动进度条暂停修复**：seek 过程中状态不一致导致播放/暂停混乱
+- **折叠态歌单不可用**：折叠时歌单图标用 popover 浮层但被 `overflow-y-auto` 容器裁剪，导致「空有两个按钮没有实际作用」。改用 Teleport + fixed 定位渲染浮层
+- **折叠态浮层被 PlayerBar 遮挡**：浮层原用固定 `max-h-60`，触发图标靠下时底部歌单被 PlayerBar 盖住。改为按视口高度动态计算 maxHeight，浮层底部永不越过 PlayerBar 顶部
+- **详情页头部被滚走**：原实现头部和列表在同一滚动容器中，向下滚动时封面/标题/按钮全部滚走。重构为 DetailLayout 后头部 `flex-shrink:0` 常驻顶部，列表独立滚动
+- **评论 tab 提前加载**：原 PlaylistDetail 用 `v-show` 包裹 CommentSection 导致组件挂载即触发评论 API。改为懒加载 + 保活模式，首次切到评论 tab 才发起请求
+- **切换 tab 紧凑态卡死**：评论/歌曲高度差异大，切换 tab 后紧凑态可能卡在错误状态。新增 `watch(currentTab)` 调用 `resetScroll()` 重置滚动和紧凑态
+- **侧边栏折叠按钮非箭头**：原实现用单根竖条倾斜，hover 时呈斜线非箭头。改为 naive-ui 双竖条方案：两根 4×38px 竖条 4px 重叠，旋转 ±12deg 形成 `<` 或 `>` 箭头
+- **箭头重叠区颜色加深**：opacity 应用到单个竖条导致重叠区颜色叠加变深。改为 opacity 应用到容器（默认 0.5，hover 1.0），竖条使用纯色
+- **歌词截断与抖动**：长歌词被 `whitespace-nowrap` 截断。移除该属性并加 `word-break:break-word` + `overflow-wrap:anywhere`；活跃行字号变化导致抖动，锁定 `line-height:1.5`
+- **滚动条主题色丢失**：之前误将 `--c-content-3` 用作 thumb 颜色。从 git 历史恢复原实现：hover 容器显示 `--c-muted`，hover thumb 变 `--c-emphasis`，主题切换自动跟随
+- **专辑标题字号变化抖动**：从 30px 切到 22px 时容器高度变化导致布局抖动。固定 `line-height:1.3` + `min-height:39px`，过渡期间容器高度恒定
+- **AlbumDetail 重复绑定滚动**：keep-alive 首次挂载时 onMounted 和 onActivated 都触发 `bindScroll()`。重构后 DetailLayout 自管滚动监听，AlbumDetail 移除全部 bindScroll/unbindScroll 逻辑
+
+### 🎨 变更
+- **侧边栏布局重构**：侧边栏改为全高布局，TopBar 仅在主内容区上方，前进/后退按钮与主内容对齐。侧边栏顶部新增 Logo 占位区（与 TopBar 等高）
+- **侧边栏透明化**：移除侧边栏和顶栏的不透明背景色，仅靠一条 40% 透明度的边框线分隔，壁纸/主题色从底层透出，实现「半隐藏」视觉
+- **文字不乱跳**：侧边栏展开/折叠过渡时，菜单文字改为 `max-width` + `overflow-hidden` + `whitespace-nowrap` 平滑过渡，不再因宽度变化导致换行乱跳
+- **顶栏透明化**：TopBar 移除背景色，加底部细线与侧边栏右边框呼应
+- **专辑封面立体感**：专辑详情页封面加入模糊阴影背板（`blur(12px) opacity(0.6) scale(0.92,0.96)`）和顶部渐变遮罩，紧凑时遮罩淡出，参考 SPlayer `.cover-shadow`/`.cover-mask`
+- **漫游抽屉外观一体化**：RoamDrawer 改用 `backdrop-blur-xl` 配合皮肤系统色板，外观跟随当前皮肤
+- **全局样式精简**：`style.css` 精简约 298 行，原硬编码色值迁移至皮肤 CSS 变量系统
+
+### ⚡ 优化
+- **音频模块拆分**：将单文件 audio.rs（1228 行）拆分为 audio/ 目录下 8 个模块（mod/buffer/commands/controller/decoder/device/download/output），提升可维护性
+- **状态管理职责分离**：将单一 player store 拆分为 player、liked、recent、ui 四个职责单一的 store
+- **类型定义抽取**：Song 等类型定义抽取到 types/song.ts
+- **API 层领域分离**：将 api.ts（225 行）拆分为 api/ 目录下 song/playlist/artist/album/search/rec/comment/device 等领域模块，index.ts 作向后兼容层
+- **两级缓存**：页面数据和歌词实现 L1 内存 + L2 localStorage 两级缓存，带 TTL 和配额管理
+- **设置迁移**：设置数据引入版本号和迁移机制（migrations/settingsMigrations.ts），支持未来 schema 变更
+- **AlbumDetail 重构接入 DetailLayout**：原本自行实现 absolute 布局 + isCompact + 滚动监听，与 DetailLayout 逻辑重复。重构后改用 DetailLayout 组件 + slot prop，删除约 100 行重复代码（onScroll/bindScroll/unbindScroll/resetScrollState/listScrollRef/rafId 等）
+- **窗口控制逻辑抽取**：TitleBar 与 TopBar 重复实现 minimize/toggleMaximize。抽取为 `composables/useWindowControls.ts` 共用
+- **溢出检测抽取**：PlaylistDetail 与 ArtistDetail 重复实现 `checkDescOverflow`。抽取为 `utils/dom.ts` 的 `checkOverflow` 函数共用
+- **骨架动画全局化**：`@keyframes pulse` 原在三个详情页分别定义，移至全局 `style.css` 共用
+- **死代码清理**：删除未使用的 `pageCacheDelete`（与 `pageCacheInvalidate` 重复）、`getAlbumDisplay`、`stores/player.ts` 中冗余的 `Song/PlayMode` re-export
+- **错误日志可读性**：9 处裸 `console.error(e)` 添加描述性前缀（如 `console.error('获取歌单详情失败', e)`），方便定位
+- **AlbumDetail watcher 合并**：原本监听 `route.params.id` 的两个 watcher（一个重置状态、一个 fetchAlbum）合并为一个
+- **新增后端命令**：`read_image_as_data_url`（读取本地图片转 data URL，供壁纸预览使用）、`show_item_in_folder`（在文件管理器中打开文件位置）
+
 ## v0.7.0
 
 ### ✨ 新功能

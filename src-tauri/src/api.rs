@@ -343,6 +343,50 @@ pub async fn recommend_resource(state: State<'_, ApiController>) -> Result<Strin
     api_call!(state, recommend_resource)
 }
 
+/// 个性化推荐歌单（无需登录）
+/// 对应 /personalized
+#[tauri::command]
+pub async fn personalized(limit: Option<u32>, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, personalized, params: [
+        ("limit", &limit.unwrap_or(30).to_string())
+    ])
+}
+
+/// 推荐新歌
+/// 对应 /personalized/newsong
+#[tauri::command]
+pub async fn personalized_newsong(limit: Option<u32>, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, personalized_newsong, params: [
+        ("limit", &limit.unwrap_or(10).to_string())
+    ])
+}
+
+/// 热门歌手
+/// 对应 /top/artists
+#[tauri::command]
+pub async fn top_artists(limit: Option<u32>, offset: Option<u32>, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, top_artists, params: [
+        ("limit", &limit.unwrap_or(30).to_string()),
+        ("offset", &offset.unwrap_or(0).to_string())
+    ])
+}
+
+/// 新歌速递
+/// 对应 /top/song，type: 全部:0 / 华语:7 / 欧美:96 / 韩国:16 / 日本:8
+#[tauri::command]
+pub async fn top_song(area_type: Option<u32>, state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, top_song, params: [
+        ("type", &area_type.unwrap_or(0).to_string())
+    ])
+}
+
+/// 最新专辑（新碟上架）
+/// 对应 /album/newest
+#[tauri::command]
+pub async fn album_newest(state: State<'_, ApiController>) -> Result<String, String> {
+    api_call!(state, album_newest)
+}
+
 /// 私人漫游模式查询参数
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

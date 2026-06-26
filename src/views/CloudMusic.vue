@@ -322,7 +322,7 @@ async function fetchCloud(offset = 0, append = false) {
       });
     }
   } catch (e) {
-    console.error(e);
+    console.error('获取云盘音乐失败', e);
     if (!append) loadError.value = true;
     else showToast('加载更多失败', 'error');
   } finally {

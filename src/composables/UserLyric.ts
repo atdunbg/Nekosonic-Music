@@ -1,60 +1,37 @@
-import { ref, watch } from 'vue';
-import { parseLrc, mergeTranslation, getCurrentLyricIndex, LyricLine } from '../utils/lyric';
+import { watch } from 'vue';
 import { usePlayerStore } from '../stores/player';
-import { MusicApi } from '../api';
+import { useLyricManager } from './useLyricManager';
 
+/**
+ * 歌词 composable（向后兼容入口）
+ *
+ * 委托给 useLyricManager，并自动绑定 player store 的 currentSong/currentTime。
+ * 新代码建议直接使用 useLyricManager。
+ */
 export function useLyric() {
   const player = usePlayerStore();
+  const manager = useLyricManager();
 
-  const lyrics = ref<LyricLine[]>([]);
-  const currentLyricIdx = ref(-1);
-  const showTranslation = ref(true);
-  const hasTranslation = ref(false);
-
-  watch(() => player.currentSong, async (song) => {
-    if (!song) {
-      lyrics.value = [];
-      currentLyricIdx.value = -1;
-      hasTranslation.value = false;
-      return;
-    }
-    try {
-      const jsonStr: string = await MusicApi.getLyric(song.id);
-      const data = JSON.parse(jsonStr);
-      const lrc = data?.lrc?.lyric || '';
-      const tLrc = data?.tlyric?.lyric || '';
-      let parsed = lrc ? parseLrc(lrc) : [];
-      if (tLrc && parsed.length > 0) {
-        parsed = mergeTranslation(parsed, tLrc);
-        hasTranslation.value = parsed.some(l => l.translation);
-      } else {
-        hasTranslation.value = false;
-      }
-      lyrics.value = parsed;
-      currentLyricIdx.value = -1;
-    } catch {
-      lyrics.value = [];
-      hasTranslation.value = false;
+  // 跟随当前歌曲加载歌词
+  watch(() => player.currentSong, (song) => {
+    manager.loadLyric(song);
+    // 预加载队列中下一首的歌词
+    const next = player.queue[player.currentIndex + 1];
+    if (next && next.id !== song?.id) {
+      manager.preloadLyric(next);
     }
   }, { immediate: true });
 
+  // 跟随播放时间更新当前歌词行
   watch(() => player.currentTime, (t) => {
-    if (lyrics.value.length === 0) return;
-    const idx = getCurrentLyricIndex(lyrics.value, t);
-    if (idx !== currentLyricIdx.value) {
-      currentLyricIdx.value = idx;
-    }
+    manager.updateCurrentIndex(t);
   });
 
-  function toggleTranslation() {
-    showTranslation.value = !showTranslation.value;
-  }
-
   return {
-    lyrics,
-    currentLyricIdx,
-    hasTranslation,
-    showTranslation,
-    toggleTranslation,
+    lyrics: manager.lyrics,
+    currentLyricIdx: manager.currentLyricIdx,
+    hasTranslation: manager.hasTranslation,
+    showTranslation: manager.showTranslation,
+    toggleTranslation: manager.toggleTranslation,
   };
 }

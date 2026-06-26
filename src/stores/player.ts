@@ -1,24 +1,15 @@
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
-import { normalizeSong, type Song } from '../utils/song';
+import { normalizeSong } from '../utils/song';
+import type { Song, PlayMode } from '../types/song';
 import { useSettingsStore } from './settings';
-import { useUserStore } from './user';
+import { useLikedStore } from './liked';
+import { useRecentStore } from './recent';
 import { showToast } from '../composables/useToast';
 import { MusicApi, AudioApi } from '../api';
 
-export type PlayMode = 'loop' | 'shuffle' | 'repeat-one';
-export type { Song };
-
 import { listen, emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-
-function loadRecentLocal(): Song[] {
-  try {
-    const raw = localStorage.getItem('recent_local');
-    if (raw) return JSON.parse(raw);
-  } catch { /* 忽略 */ }
-  return [];
-}
 
 export const usePlayerStore = defineStore('player', () => {
   const currentSong = ref<Song | null>(null);
@@ -29,10 +20,20 @@ export const usePlayerStore = defineStore('player', () => {
   const queue = ref<Song[]>([]);
   const currentIndex = ref(-1);
 
+  /** 当前播放来源（用于卡片显示播放/暂停状态） */
+  const currentSource = ref<{ type: 'playlist' | 'album' | 'songs' | 'fm' | null; id: number | null }>({
+    type: null,
+    id: null,
+  });
+
   const settings = useSettingsStore();
   const volume = ref(settings.volume);
 
   watch(volume, (val) => { settings.volume = val; });
+
+  const recentStore = useRecentStore();
+  const likedStore = useLikedStore();
+  const { addRecent } = recentStore;
 
   let tickInterval: ReturnType<typeof setInterval> | null = null;
   function clearTick() {
@@ -41,12 +42,6 @@ export const usePlayerStore = defineStore('player', () => {
   function setTick(v: ReturnType<typeof setInterval>) {
     tickInterval = v;
   }
-
-  const recentLocal = ref<Song[]>(loadRecentLocal());
-  const MAX_RECENT = 200;
-  let recentLocalTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const likedIds = ref<Set<number>>(new Set());
 
   function emitPlaybackState() {
     const song = currentSong.value;
@@ -62,52 +57,6 @@ export const usePlayerStore = defineStore('player', () => {
       volume: volume.value / 100,
     });
   }
-
-  function isLiked(songId: number): boolean {
-    return likedIds.value.has(songId);
-  }
-
-  async function loadLikedIds() {
-    const userStore = useUserStore();
-    if (!userStore.isLoggedIn) return;
-    try {
-      const json = await MusicApi.likelist(userStore.user!.userId);
-      const data = JSON.parse(json);
-      const ids: number[] = data.ids || data.data?.ids || [];
-      likedIds.value = new Set(ids);
-    } catch (e) {
-      console.error('加载喜欢列表失败', e);
-    }
-  }
-
-  async function toggleLike(songId: number) {
-    const wasLiked = likedIds.value.has(songId);
-    const newLike = !wasLiked;
-    try {
-      await MusicApi.likeSong(songId, newLike);
-      if (newLike) {
-        likedIds.value.add(songId);
-      } else {
-        likedIds.value.delete(songId);
-      }
-      likedIds.value = new Set(likedIds.value);
-    } catch { /* 忽略 */ }
-  }
-
-  function addRecent(song: Song) {
-    recentLocal.value = recentLocal.value.filter(s => s.id !== song.id);
-    recentLocal.value.unshift(song);
-    if (recentLocal.value.length > MAX_RECENT) {
-      recentLocal.value = recentLocal.value.slice(0, MAX_RECENT);
-    }
-  }
-
-  watch(recentLocal, (val) => {
-    clearTimeout(recentLocalTimer);
-    recentLocalTimer = setTimeout(() => {
-      localStorage.setItem('recent_local', JSON.stringify(val));
-    }, 2000);
-  }, { deep: true });
 
   const isFmMode = ref(false);
   const fmQueue: Song[] = [];
@@ -331,7 +280,7 @@ export const usePlayerStore = defineStore('player', () => {
     await playCurrent();
   }
 
-  async function playFromList(songs: Song[], startIndex: number) {
+  async function playFromList(songs: Song[], startIndex: number, source?: { type: 'playlist' | 'album' | 'songs'; id?: number }) {
     disableFmMode();
     if (songs.length === 0) return;
 
@@ -340,7 +289,12 @@ export const usePlayerStore = defineStore('player', () => {
       const sameQueue = queue.value.length === songs.length
         && queue.value.every((s, i) => s.id === songs[i].id);
       if (sameQueue) {
-        if (!playing.value) {
+        // 同一首歌且同队列：切换播放/暂停
+        if (playing.value) {
+          await AudioApi.pauseAudio();
+          playing.value = false;
+          clearTick();
+        } else {
           await AudioApi.resumeAudio();
           playing.value = true;
           startTick();
@@ -351,6 +305,7 @@ export const usePlayerStore = defineStore('player', () => {
 
     queue.value = [...songs];
     currentIndex.value = Math.max(0, Math.min(startIndex, songs.length - 1));
+    currentSource.value = { type: source?.type ?? null, id: source?.id ?? null };
     await playCurrent();
   }
 
@@ -560,6 +515,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function toggle() {
+    if (_switchingSong) return;
     try {
       const backendPlaying = await AudioApi.isAudioPlaying();
       if (backendPlaying !== playing.value) {
@@ -590,15 +546,17 @@ export const usePlayerStore = defineStore('player', () => {
 
   function prev() {
     if (isFmMode.value) return;
+    if (_switchingSong) return;
     if (queue.value.length === 0) return;
     currentIndex.value = (currentIndex.value - 1 + queue.value.length) % queue.value.length;
     playCurrent();
   }
 
-  async function playAll(songs: Song[]) {
+  async function playAll(songs: Song[], source?: { type: 'playlist' | 'album' | 'songs'; id?: number }) {
     if (songs.length === 0) return;
     queue.value = [...songs];
     currentIndex.value = 0;
+    currentSource.value = { type: source?.type ?? null, id: source?.id ?? null };
     await playCurrent();
   }
 
@@ -630,6 +588,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function seek(time: number) {
+    if (_switchingSong) return;
     try {
       currentTime.value = time;
       if (onSeekStart) onSeekStart();
@@ -661,6 +620,7 @@ export const usePlayerStore = defineStore('player', () => {
       return;
     }
 
+    if (_switchingSong) return;
     if (queue.value.length === 0) return;
     let nextIndex: number;
     switch (playMode.value) {
@@ -685,30 +645,6 @@ export const usePlayerStore = defineStore('player', () => {
     playCurrent();
   }
 
-  const showRoamDrawer = ref(false);
-  const roamTab = ref<'lyric' | 'comment'>('lyric');
-  const commentSongId = ref<number | null>(null);
-  const dominantColor = ref('');
-
-  function openRoamDrawer(tab: 'lyric' | 'comment' = 'lyric') {
-    roamTab.value = tab;
-    showRoamDrawer.value = true;
-  }
-
-  function openCommentForSong(songId: number) {
-    commentSongId.value = songId;
-    openRoamDrawer('comment');
-  }
-
-  function closeRoamDrawer() {
-    showRoamDrawer.value = false;
-    roamTab.value = 'lyric';
-  }
-
-  function toggleRoamDrawer() {
-    showRoamDrawer.value = !showRoamDrawer.value;
-  }
-
   async function loadFirstFmSong() {
   try {
     const batch = await fetchFmBatch();
@@ -720,7 +656,7 @@ export const usePlayerStore = defineStore('player', () => {
       return true;
     }
   } catch (e) {
-    console.error(e);
+    console.error('FM 加载下一首失败', e);
     showToast('FM 加载失败', 'error');
   }
   return false;
@@ -843,6 +779,7 @@ watch(playing, (val) => {
     duration,
     queue,
     currentIndex,
+    currentSource,
     playMode,
     isFmMode,
     enableFmMode,
@@ -864,21 +801,16 @@ watch(playing, (val) => {
     removeFromQueue,
     clearQueue,
 
-    recentLocal,
+    // 喜欢列表（委托给 liked store）
+    get likedIds() { return likedStore.likedIds; },
+    isLiked: likedStore.isLiked,
+    loadLikedIds: likedStore.loadLikedIds,
+    toggleLike: likedStore.toggleLike,
 
-    likedIds,
-    isLiked,
-    loadLikedIds,
-    toggleLike,
+    // 最近播放（委托给 recent store）
+    get recentLocal() { return recentStore.recentLocal; },
+    addRecent,
 
-    showRoamDrawer,
-    roamTab,
-    commentSongId,
-    dominantColor,
-    openCommentForSong,
-    openRoamDrawer,
-    closeRoamDrawer,
-    toggleRoamDrawer,
     loadFirstFmSong,
 
     fetchFmBatch,

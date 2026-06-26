@@ -1,13 +1,5 @@
-export interface Song {
-  id: number;
-  name: string;
-  ar: { id?: number; name: string }[];
-  al: { id?: number; picUrl: string; name?: string };
-  dt?: number;
-  localPath?: string;
-  alg?: string;
-  br?: number;
-}
+export type { Song } from '../types/song';
+import type { Song } from '../types/song';
 
 export function normalizeSong(song: any): Song {
   const al = {
@@ -46,11 +38,6 @@ export function getArtistDisplay(song: Song): string {
     .filter(a => a.id != null && a.name)
     .map(a => a.name);
   return names.length > 0 ? names.join(' / ') : '未知歌手';
-}
-
-export function getAlbumDisplay(song: Song): string {
-  if (!song.al?.id || !song.al?.name) return '未知专辑';
-  return song.al.name;
 }
 
 const colorCache = new Map<string, string>();

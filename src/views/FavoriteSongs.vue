@@ -92,7 +92,7 @@ async function loadData(force = false) {
     songs.value = (trackData.songs || []).map(normalizeSong);
     pageCacheSet('favoriteSongs', songs.value);
   } catch (e) {
-    console.error(e);
+    console.error('加载我喜欢的音乐失败', e);
     loadError.value = true;
   } finally {
     loading.value = false;

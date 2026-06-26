@@ -70,6 +70,10 @@
     -webkit-user-select: text;
   }
 
+  /* 滚动条：hover 容器显示主题色 thumb（--c-muted / --c-emphasis），默认透明。
+     - 颜色跟随主题变量（皮肤切换自动适配）
+     - 宽度 5px，不显眼；hover 容器才显示，hover thumb 变深
+     - 彻底无滚动条的容器（歌词界面）加 .custom-scroll 或 [data-no-scrollbar] */
   ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
@@ -87,6 +91,22 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background-color: var(--c-emphasis);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-muted) transparent;
+  }
+
+  /* 彻底隐藏滚动条的容器（歌词界面等） */
+  .custom-scroll,
+  [data-no-scrollbar] {
+    scrollbar-width: none !important;
+  }
+  .custom-scroll::-webkit-scrollbar,
+  [data-no-scrollbar]::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
   }
 
   select {
@@ -142,4 +162,10 @@
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
   }
+}
+
+/* 骨架屏脉冲动画：三个详情页（Playlist/Album/Artist）共用 */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }

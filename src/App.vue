@@ -19,21 +19,25 @@
 
   <!-- 主容器 -->
   <div class="flex flex-col h-screen text-content overflow-hidden relative z-[2]" :style="rootBgStyle">
-    <TitleBar @close="closeWindow" />
-
     <div class="flex flex-1 overflow-hidden" v-if="windowVisible">
-      <Sidebar />
+      <Sidebar :mode="ui.sidebarMode" />
 
-      <main class="flex-1 overflow-y-auto pb-24">
-        <router-view v-slot="{ Component }">
-          <keep-alive :max="10" :include="keepAliveInclude">
-            <component :is="Component" />
-          </keep-alive>
-        </router-view>
-      </main>
+      <div class="flex flex-col flex-1 overflow-hidden">
+        <TopBar @close="closeWindow" />
+
+        <main class="flex-1 overflow-hidden flex flex-col" :style="{ paddingBottom: player.currentSong ? '70px' : '0px' }">
+          <div ref="mainScrollRef" class="flex-1 overflow-y-auto min-h-0 relative">
+            <router-view v-slot="{ Component }">
+              <keep-alive :max="10" :include="keepAliveInclude">
+                <component :is="Component" />
+              </keep-alive>
+            </router-view>
+          </div>
+        </main>
+      </div>
     </div>
 
-    <RoamDrawer :visible="windowVisible && player.showRoamDrawer" />
+    <RoamDrawer :visible="windowVisible && ui.showRoamDrawer" />
 
     <PlayerBar v-if="player.currentSong" />
     <ToastContainer />
@@ -61,7 +65,8 @@ import { useRoute } from 'vue-router';
 import { useUserStore } from './stores/user';
 import { useSettingsStore, type CloseAction } from './stores/settings';
 import { usePlayerStore } from './stores/player';
-import TitleBar from './components/TitleBar.vue';
+import { useUiStore } from './stores/ui';
+import TopBar from './components/TopBar.vue';
 import Sidebar from './components/Sidebar.vue';
 import RoamDrawer from './components/RoamDrawer.vue';
 import PlayerBar from './components/PlayerBar.vue';
@@ -79,6 +84,7 @@ import { hexToRgba } from './utils/color';
 
 const userStore = useUserStore();
 const player = usePlayerStore();
+const ui = useUiStore();
 const settings = useSettingsStore();
 const updater = useUpdater();
 const { isOnline } = useOnlineStatus();
@@ -94,6 +100,22 @@ const windowVisible = ref(true);
 // --- Keep-alive 缓存管理 ---
 // 规则：30秒未访问的页面自动清除缓存；多级跳转时保留导航链上的页面；FavoriteSongs 常驻
 const route = useRoute();
+
+// 主滚动容器 ref（路由切换时重置滚动位置）
+const mainScrollRef = ref<HTMLElement | null>(null);
+
+// 路由切换时重置主滚动容器到顶部
+// keep-alive 缓存会保留滚动位置，详情页等需要主动重置
+watch(() => route.path, () => {
+  // 双重保险：nextTick + 延迟，确保 DOM 更新和缓存恢复后再滚动
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (mainScrollRef.value) {
+        mainScrollRef.value.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+    });
+  });
+});
 
 const ROUTE_COMPONENT: Record<string, string> = {
   home: 'HomeView', discover: 'DiscoverView', search: 'DiscoverView',
@@ -175,6 +197,26 @@ watch(() => settings.currentWallpaper.path, async (path) => {
   }
 }, { immediate: true });
 
+// --- 响应式侧边栏：窄屏自动切抽屉模式 ---
+const DRAWER_BREAKPOINT = 768; // px
+let savedSidebarMode: 'expanded' | 'collapsed' = 'expanded';
+
+function applyResponsiveSidebar() {
+  const width = window.innerWidth;
+  if (width < DRAWER_BREAKPOINT) {
+    // 窄屏：切抽屉模式（不持久化，保留用户原选择）
+    if (ui.sidebarMode !== 'drawer') {
+      savedSidebarMode = ui.sidebarMode as 'expanded' | 'collapsed';
+      ui.setSidebarMode('drawer');
+    }
+  } else {
+    // 宽屏：恢复用户选择
+    if (ui.sidebarMode === 'drawer') {
+      ui.setSidebarMode(savedSidebarMode);
+    }
+  }
+}
+
 // 根容器背景：有壁纸时透明（遮罩层已保证文字可读），无壁纸时不透明
 const rootBgStyle = computed(() => {
   const wp = settings.currentWallpaper;
@@ -205,6 +247,10 @@ watch(() => userStore.isLoggedIn, (val) => {
 onMounted(() => {
   document.addEventListener('contextmenu', (e) => e.preventDefault());
   startCleanup();
+
+  // 响应式侧边栏
+  applyResponsiveSidebar();
+  window.addEventListener('resize', applyResponsiveSidebar);
 
   AudioApi.stopAudio().catch(() => {});
 

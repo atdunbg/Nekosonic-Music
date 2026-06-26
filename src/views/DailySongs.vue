@@ -72,7 +72,7 @@ async function loadData(force = false) {
     songs.value = (data.data?.dailySongs || []).map(normalizeSong);
     pageCacheSet('dailySongs', songs.value);
   } catch (e) {
-    console.error(e);
+    console.error('获取每日推荐失败', e);
     loadError.value = true;
   } finally {
     loading.value = false;

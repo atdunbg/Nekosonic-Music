@@ -129,7 +129,7 @@ async function refresh() {
     pageCacheSet('downloadedMusic', list);
     fetchMissingCovers(songs.value);
   } catch (e) {
-    console.error(e);
+    console.error('加载下载音乐列表失败', e);
   } finally {
     loading.value = false;
   }

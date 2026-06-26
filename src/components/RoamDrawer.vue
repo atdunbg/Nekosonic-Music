@@ -4,16 +4,16 @@
       <!-- 背景层：fade in 覆盖全屏 -->
       <div
         class="absolute inset-0 backdrop-blur-xl"
-        :class="!player.dominantColor && 'bg-surface/95'"
-        :style="player.dominantColor ? { backgroundColor: player.dominantColor } : {}"
+        :class="!ui.dominantColor && 'bg-surface/95'"
+        :style="ui.dominantColor ? { backgroundColor: ui.dominantColor } : {}"
       ></div>
-      <div v-if="player.dominantColor" class="absolute inset-0 bg-black/60 pointer-events-none"></div>
+      <div v-if="ui.dominantColor" class="absolute inset-0 bg-black/60 pointer-events-none"></div>
 
       <!-- 内容层：slide up/down -->
       <div class="relative z-10 flex flex-col flex-1 min-h-0 drawer-content">
-        <TitleBar :dark-mode="!!player.dominantColor" transparent @close="player.closeRoamDrawer()">
+        <TitleBar :dark-mode="!!ui.dominantColor" transparent @close="ui.closeRoamDrawer()">
           <template #left>
-            <button @click="player.closeRoamDrawer()" :class="dc ? 'text-white/60 hover:text-white' : 'text-content-2 hover:text-content'" class="transition">
+            <button @click="ui.closeRoamDrawer()" :class="dc ? 'text-white/60 hover:text-white' : 'text-content-2 hover:text-content'" class="transition">
               <IconChevronDown class="w-5 h-5" />
             </button>
           </template>
@@ -51,14 +51,14 @@
           <!-- 右侧：歌词/评论 -->
           <div class="w-3/5 relative min-h-0 overflow-hidden flex flex-col">
             <div class="flex items-center gap-1 mb-3 px-4">
-              <button @click="player.roamTab = 'lyric'"
+              <button @click="ui.roamTab = 'lyric'"
                 class="px-3 py-1 rounded-full text-sm transition"
-                :class="tabClass(player.roamTab === 'lyric')">
+                :class="tabClass(ui.roamTab === 'lyric')">
                 歌词
               </button>
-              <button @click="player.roamTab = 'comment'"
+              <button @click="ui.roamTab = 'comment'"
                 class="px-3 py-1 rounded-full text-sm transition"
-                :class="tabClass(player.roamTab === 'comment')">
+                :class="tabClass(ui.roamTab === 'comment')">
                 评论
               </button>
               <button v-if="hasTranslation" @click="toggleTranslation"
@@ -68,14 +68,14 @@
                 译
               </button>
             </div>
-            <div v-show="player.roamTab === 'lyric'" ref="lyricScrollContainer" class="flex-1 min-h-0 overflow-y-auto custom-scroll px-4">
+            <div v-show="ui.roamTab === 'lyric'" ref="lyricScrollContainer" class="flex-1 min-h-0 overflow-y-auto custom-scroll px-4">
               <div v-if="lyrics.length > 0" class="w-full max-w-lg mx-auto text-center"
                 :style="{ paddingTop: roamLyricPadPx + 'px', paddingBottom: roamLyricPadPx + 'px' }">
                 <p
                   v-for="(line, idx) in lyrics"
                   :key="idx"
                   :class="getRoamLyricClass(idx)"
-                  class="roam-lyric-line px-4 py-3 rounded-lg cursor-pointer whitespace-nowrap transition-[font-size] duration-300 ease-out"
+                  class="roam-lyric-line px-4 py-3 rounded-lg cursor-pointer transition-[font-size,opacity] duration-300 ease-out"
                   @click="seekToRoamLyric(line.time)"
                   @mouseenter="roamLyricHovering = true"
                   @mouseleave="roamLyricHovering = false"
@@ -86,8 +86,8 @@
               </div>
               <div v-else :class="dc ? 'text-white/40' : 'text-content-3'" class="text-center mt-8">暂无歌词</div>
             </div>
-            <div v-show="player.roamTab === 'comment'" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
-              <CommentSection v-if="roamSong" :type="0" :id="player.commentSongId || roamSong.id" :key="player.commentSongId || roamSong.id" :dark-mode="!!player.dominantColor" />
+            <div v-show="ui.roamTab === 'comment'" class="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+              <CommentSection v-if="roamSong" :type="0" :id="ui.commentSongId || roamSong.id" :key="ui.commentSongId || roamSong.id" :dark-mode="!!ui.dominantColor" />
             </div>
           </div>
         </div>
@@ -100,6 +100,7 @@
 import { ref, watch, onBeforeUnmount, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
+import { useUiStore } from '../stores/ui';
 import { getCoverUrl, extractDominantColor } from '../utils/song';
 import { useLyric } from '../composables/UserLyric';
 import TitleBar from './TitleBar.vue';
@@ -114,9 +115,10 @@ defineProps<{
 
 const router = useRouter();
 const player = usePlayerStore();
+const ui = useUiStore();
 
 // dominantColor 是否存在（模板中频繁使用）
-const dc = computed(() => !!player.dominantColor);
+const dc = computed(() => !!ui.dominantColor);
 
 const { lyrics, currentLyricIdx, hasTranslation, showTranslation, toggleTranslation } = useLyric();
 const lyricScrollContainer = ref<HTMLElement | null>(null);
@@ -133,9 +135,9 @@ watch(roamCoverUrl, async (url) => {
   roamCoverError.value = false;
   if (url) {
     const color = await extractDominantColor(url);
-    player.dominantColor = color;
+    ui.dominantColor = color;
   } else {
-    player.dominantColor = '';
+    ui.dominantColor = '';
   }
 });
 
@@ -147,7 +149,7 @@ function updateRoamLyricPad() {
   }
 }
 
-watch(() => player.showRoamDrawer, (val) => {
+watch(() => ui.showRoamDrawer, (val) => {
   if (val) {
     nextTick(() => {
       updateRoamLyricPad();
@@ -174,13 +176,13 @@ onBeforeUnmount(() => {
 });
 
 watch(currentLyricIdx, () => {
-  if (player.showRoamDrawer && !roamLyricHovering.value) {
+  if (ui.showRoamDrawer && !roamLyricHovering.value) {
     nextTick(() => scrollToRoamActiveLyric());
   }
 });
 
 watch(showTranslation, () => {
-  if (player.showRoamDrawer && !roamLyricHovering.value) {
+  if (ui.showRoamDrawer && !roamLyricHovering.value) {
     nextTick(() => scrollToRoamActiveLyric());
   }
 });
@@ -241,7 +243,7 @@ function seekToRoamLyric(time: number) {
 }
 
 function navigateFromDrawer(routeLocation: { name: string; params: any }) {
-  player.closeRoamDrawer();
+  ui.closeRoamDrawer();
   router.push(routeLocation);
 }
 </script>
@@ -260,4 +262,14 @@ function navigateFromDrawer(routeLocation: { name: string; params: any }) {
 .drawer-leave-to .drawer-content { transform: translateY(100%); }
 
 .custom-scroll::-webkit-scrollbar { width: 0; display: none; }
+
+/* 歌词行：长歌词允许换行（不再被截断）；
+   锁定行高让字号在 active/diff 切换时盒模型高度不变，避免整列抖动乱跳。
+   行高取 active 字号(text-xl=1.25rem≈20px)对应舒适值 1.5×≈30px，
+   其余小字号在同一行高内垂直居中显示。 */
+.roam-lyric-line {
+  line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 </style>

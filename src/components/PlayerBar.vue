@@ -3,10 +3,10 @@
     class="fixed bottom-0 left-0 right-0 z-50 select-none backdrop-blur-xl"
     :style="playerBarBgStyle"
   >
-    <div v-if="player.dominantColor"
+    <div v-if="ui.dominantColor"
       class="absolute inset-0 pointer-events-none transition-opacity duration-300"
       :class="drawerActive ? 'opacity-100' : 'opacity-0'"
-      :style="{ backgroundColor: player.dominantColor }"
+      :style="{ backgroundColor: ui.dominantColor }"
     >
       <div class="absolute inset-0 bg-black/60"></div>
     </div>
@@ -24,10 +24,10 @@
 
     <div class="flex items-center px-6 h-16 relative z-10">
       <div class="flex items-center gap-3 w-56 min-w-0">
-        <div v-if="getCoverUrl(player.currentSong)" class="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示">
+        <div v-if="getCoverUrl(player.currentSong)" class="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 cursor-pointer hover:scale-105 transition-transform" @click="ui.toggleRoamDrawer()" title="全屏展示">
           <img :src="getCoverUrl(player.currentSong)" class="w-full h-full object-cover" />
         </div>
-        <div v-else class="w-10 h-10 rounded-md flex-shrink-0 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" @click="player.toggleRoamDrawer()" title="全屏展示"
+        <div v-else class="w-10 h-10 rounded-md flex-shrink-0 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform" @click="ui.toggleRoamDrawer()" title="全屏展示"
           :class="drawerActive ? 'bg-white/10' : 'bg-muted'">
           <IconMusic class="w-[18px] h-[18px]" :class="drawerActive ? 'text-white/50' : 'text-content-3'" />
         </div>
@@ -213,7 +213,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from 'vue';
-import { usePlayerStore, PlayMode } from '../stores/player';
+import { usePlayerStore } from '../stores/player';
+import type { PlayMode } from '../types/song';
+import { useUiStore } from '../stores/ui';
 import { useSettingsStore } from '../stores/settings';
 import { useDownload } from '../composables/useDownload';
 import { formatTime } from '../utils/format';
@@ -246,9 +248,10 @@ import { hexToRgba } from '../utils/color';
 
 const router = useRouter();
 const player = usePlayerStore();
+const ui = useUiStore();
 const settings = useSettingsStore();
 const download = useDownload();
-const drawerActive = computed(() => player.showRoamDrawer && !!player.dominantColor);
+const drawerActive = computed(() => ui.showRoamDrawer && !!ui.dominantColor);
 
 // PlayerBar 背景：有壁纸时用 --c-bg 高不透明度（与遮罩层同色系，视觉融合），
 // 无壁纸时用 surface 色

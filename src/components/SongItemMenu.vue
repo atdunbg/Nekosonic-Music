@@ -19,13 +19,13 @@
 
 <script setup lang="ts">
 import { ref, onBeforeUnmount, onMounted } from 'vue';
-import { usePlayerStore } from '../stores/player';
+import { useUiStore } from '../stores/ui';
 import { showToast } from '../composables/useToast';
 import IconEllipsis from '~icons/lucide/ellipsis';
 import IconMessageSquare from '~icons/lucide/message-square';
 import IconShare2 from '~icons/lucide/share-2';
 
-const player = usePlayerStore();
+const ui = useUiStore();
 const props = defineProps<{ songId: number }>();
 const open = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
@@ -36,7 +36,7 @@ function toggle() {
 
 function handleComment() {
   open.value = false;
-  player.openCommentForSong(props.songId);
+  ui.openCommentForSong(props.songId);
 }
 
 async function handleShare() {

@@ -204,7 +204,7 @@ async function refresh() {
     pageCacheSet('localMusic', list);
     fetchMissingCovers(songs.value);
   } catch (e) {
-    console.error(e);
+    console.error('扫描本地音乐文件夹失败', e);
   } finally {
     loading.value = false;
   }
