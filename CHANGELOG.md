@@ -1,3 +1,8 @@
+## v0.8.1
+
+### 🐛 修复
+- **关闭到托盘不生效**：点击关闭按钮选择「最小化到托盘」或「直接退出」时，窗口未隐藏/退出。原因是 `capabilities/default.json` 缺少 `core:window:allow-hide` 权限，前端调用 `currentWindow.hide()` 被 Tauri 2 权限系统静默拦截。补齐 `allow-hide` 与 `allow-show` 权限
+
 ## v0.8.0
 
 本次版本为架构重构与交互升级版本，涵盖皮肤系统、详情页架构、侧边栏交互、播放器稳定性、底层模块拆分等方面的系统性优化。
