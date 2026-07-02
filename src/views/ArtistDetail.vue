@@ -177,7 +177,7 @@ import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
 import { formatPlayCount, formatDate } from '../utils/format';
 import { checkOverflow } from '../utils/dom';
-import { normalizeSong, type Song } from '../utils/song';
+import { normalizeSongsWithPrivileges, type Song } from '../utils/song';
 import { pageCacheGet, pageCacheSet } from '../composables/usePageCache';
 import VirtualSongList from '../components/VirtualSongList.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -284,7 +284,8 @@ async function fetchArtist(id: number, force = false) {
     try {
       const jsonStr = await MusicApi.artistSongs({ id, order: 'hot', limit: 50, offset: 0 });
       const data = JSON.parse(jsonStr);
-      songs.value = (data.songs || []).map(normalizeSong);
+      // /artist/songs 返回的 privilege 在单独的 privileges 数组里，需合并到 song 上
+      songs.value = normalizeSongsWithPrivileges(data.songs || [], data.privileges);
     } catch { /* 忽略 */ }
     finally { songsLoading.value = false; }
   };

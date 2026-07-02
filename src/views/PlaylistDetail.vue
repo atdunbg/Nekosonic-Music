@@ -166,7 +166,7 @@ import { useUserStore } from '../stores/user';
 import { showToast } from '../composables/useToast';
 import { formatPlayCount } from '../utils/format';
 import { checkOverflow } from '../utils/dom';
-import { normalizeSong, type Song } from '../utils/song';
+import { normalizeSongsWithPrivileges, type Song } from '../utils/song';
 import { pageCacheGet, pageCacheSet } from '../composables/usePageCache';
 import VirtualSongList from '../components/VirtualSongList.vue';
 import CommentSection from '../components/CommentSection.vue';
@@ -236,7 +236,7 @@ async function fetchPlaylist(id: number, force = false) {
     const data = JSON.parse(jsonStr);
     playlist.value = data.playlist;
     playlistLoading.value = false;
-    songs.value = (data.playlist.tracks || []).map(normalizeSong);
+    songs.value = normalizeSongsWithPrivileges(data.playlist.tracks || [], data.privileges);
     songsLoading.value = false;
     subscribed.value = data.playlist.subscribed || false;
     pageCacheSet(cacheKey, { playlist: playlist.value, songs: songs.value, subscribed: subscribed.value });

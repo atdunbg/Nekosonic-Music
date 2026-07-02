@@ -40,6 +40,7 @@ export const MusicApi = {
   likelist: SongApi.likelist,
   likeSong: SongApi.likeSong,
   scrobble: SongApi.scrobble,
+  getExternalSongUrl: SongApi.getExternalSongUrl,
 
   // 歌单
   userPlaylist: PlaylistApi.userPlaylist,
@@ -53,6 +54,7 @@ export const MusicApi = {
   searchSuggest: SearchApi.searchSuggest,
   getHotSearch: SearchApi.getHotSearch,
   cloudsearch: SearchApi.cloudsearch,
+  searchSongsMulti: SearchApi.searchSongsMulti,
 
   // 专辑
   albumDetail: AlbumApi.albumDetail,

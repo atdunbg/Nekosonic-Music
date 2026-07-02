@@ -59,19 +59,26 @@
 
       <div class="flex-1 flex flex-col items-center justify-center gap-1">
         <div class="flex items-center gap-5 relative">
-          <button @click="player.prev()" :disabled="player.isFmMode" :class="[
+          <button @click="player.prev()" :disabled="player.isFmMode || player.switching" :class="[
             'transition',
-            player.isFmMode ? (drawerActive ? 'text-white/20 cursor-not-allowed' : 'text-content-4 cursor-not-allowed') : (drawerActive ? 'text-white/70 hover:text-white' : 'text-content-2 hover:text-content'),
+            (player.isFmMode || player.switching) ? (drawerActive ? 'text-white/20 cursor-not-allowed' : 'text-content-4 cursor-not-allowed') : (drawerActive ? 'text-white/70 hover:text-white' : 'text-content-2 hover:text-content'),
           ]">
             <IconSkipBack class="w-5 h-5" />
           </button>
-          <button @click="player.toggle()"
+          <button @click="player.toggle()" :disabled="player.switching"
             class="w-9 h-9 flex items-center justify-center rounded-full transition"
-            :class="drawerActive ? 'bg-white/15 hover:bg-white/25 border border-white/20' : 'bg-muted hover:bg-emphasis border border-emphasis'">
-            <IconPause v-if="player.playing" class="w-4 h-4" :class="drawerActive ? 'text-white' : 'text-content'" />
+            :class="[
+              drawerActive ? 'bg-white/15 hover:bg-white/25 border border-white/20' : 'bg-muted hover:bg-emphasis border border-emphasis',
+              player.switching ? 'cursor-not-allowed' : '',
+            ]">
+            <IconLoader2 v-if="player.switching" class="w-4 h-4 animate-spin" :class="drawerActive ? 'text-white' : 'text-content'" />
+            <IconPause v-else-if="player.playing" class="w-4 h-4" :class="drawerActive ? 'text-white' : 'text-content'" />
             <IconPlay v-else class="w-4 h-4" :class="drawerActive ? 'text-white' : 'text-content'" />
           </button>
-          <button @click="player.next()" :class="drawerActive ? 'text-white/70 hover:text-white transition' : 'text-content-2 hover:text-content transition'">
+          <button @click="player.next()" :disabled="player.switching" :class="[
+            'transition',
+            player.switching ? (drawerActive ? 'text-white/20 cursor-not-allowed' : 'text-content-4 cursor-not-allowed') : (drawerActive ? 'text-white/70 hover:text-white' : 'text-content-2 hover:text-content'),
+          ]">
             <IconSkipForward class="w-5 h-5" />
           </button>
           <button v-if="player.isFmMode && player.currentSong" @click="showDislikeModal = true" class="absolute left-full ml-5" :class="drawerActive ? 'text-white/50 hover:text-danger transition' : 'text-content-3 hover:text-danger transition'" title="减少推荐">

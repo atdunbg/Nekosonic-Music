@@ -217,8 +217,18 @@ function onInputChange() {
     try {
       const jsonStr: string = await MusicApi.searchSuggest(keyword.value.trim());
       const data = JSON.parse(jsonStr);
-      const all = data.result?.allMatch || [];
-      suggestions.value = all.map((m: any) => m.keyword).slice(0, 8);
+      const result = data.result || {};
+      // 优先用 allMatch（type=mobile 格式）
+      let list: string[] = (result.allMatch || []).map((m: any) => m.keyword);
+      // 兜底：从 songs/artists/albums 提取名称
+      if (list.length === 0) {
+        list = [
+          ...(result.songs || []).map((s: any) => s.name),
+          ...(result.artists || []).map((a: any) => a.name),
+          ...(result.albums || []).map((a: any) => a.name),
+        ].filter(Boolean);
+      }
+      suggestions.value = list.slice(0, 8);
       showPanel.value = true;
     } catch {
       suggestions.value = [];

@@ -26,6 +26,165 @@
     </section>
 
     <section class="mb-8">
+      <h2 class="text-sm text-content-2 uppercase tracking-wider mb-4">音源</h2>
+      <div class="space-y-5">
+        <!-- 总开关 -->
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium">音源补充</p>
+            <p class="text-xs text-content-3 mt-0.5">网易云无版权 / VIP 歌曲自动从其他音源搜索播放</p>
+          </div>
+          <button
+            @click="settings.setMusicSourceEnabled(!settings.musicSourceEnabled)"
+            class="relative w-11 h-6 rounded-full transition-colors duration-200"
+            :class="settings.musicSourceEnabled ? 'bg-accent' : 'bg-muted'"
+            :aria-pressed="settings.musicSourceEnabled"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200"
+              :class="settings.musicSourceEnabled ? 'translate-x-5' : ''"
+            ></span>
+          </button>
+        </div>
+
+        <!-- 音源列表 -->
+        <div v-if="settings.musicSourceEnabled" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-content-3">音源列表（拖拽或上下按钮调整优先级，自定义源可编辑/删除）</p>
+            <button @click="settings.resetMusicSourcesToDefault()" class="text-xs text-content-3 hover:text-accent-text transition">恢复默认</button>
+          </div>
+          <div
+            v-for="(src, index) in settings.musicSources"
+            :key="src.id"
+            draggable="true"
+            @dragstart="onSourceDragStart(index)"
+            @dragover.prevent
+            @drop="onSourceDrop(index)"
+            @dragend="onSourceDragEnd"
+            class="flex items-center justify-between p-3 rounded-lg bg-subtle border border-line transition"
+            :class="draggedSourceIndex === index ? 'opacity-50 border-accent/40' : 'hover:border-line-2'"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <IconGripVertical class="w-4 h-4 text-content-4 cursor-grab flex-shrink-0" />
+              <span class="text-xs text-content-3 w-5 flex-shrink-0">#{{ index + 1 }}</span>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm truncate">{{ src.label }}</span>
+                  <span v-if="src.kind === 'custom'" class="text-[10px] px-1.5 py-0.5 rounded bg-accent/15 text-accent-text flex-shrink-0">自定义</span>
+                  <span v-if="!src.enabled" class="text-[10px] px-1.5 py-0.5 rounded bg-muted text-content-3 flex-shrink-0">已禁用</span>
+                </div>
+                <p v-if="src.kind === 'custom' && src.searchUrl" class="text-[10px] text-content-4 truncate mt-0.5">{{ src.searchUrl }}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <button @click="moveSourceUp(index)" :disabled="index === 0" class="w-6 h-6 flex items-center justify-center rounded text-content-3 hover:text-content hover:bg-muted transition disabled:opacity-30 disabled:cursor-not-allowed" title="上移">
+                <IconChevronUp style="font-size: 14px" />
+              </button>
+              <button @click="moveSourceDown(index)" :disabled="index === settings.musicSources.length - 1" class="w-6 h-6 flex items-center justify-center rounded text-content-3 hover:text-content hover:bg-muted transition disabled:opacity-30 disabled:cursor-not-allowed" title="下移">
+                <IconChevronDown style="font-size: 14px" />
+              </button>
+              <button v-if="src.kind === 'custom'" @click="openSourceEditor(src.id)" class="w-6 h-6 flex items-center justify-center rounded text-content-3 hover:text-accent-text hover:bg-accent/10 transition" title="编辑">
+                <IconPencil style="font-size: 12px" />
+              </button>
+              <button v-if="src.kind === 'custom'" @click="deleteSource(src.id)" class="w-6 h-6 flex items-center justify-center rounded text-content-3 hover:text-danger hover:bg-danger/10 transition" title="删除">
+                <IconTrash2 style="font-size: 12px" />
+              </button>
+              <button
+                @click="settings.toggleMusicSource(src.id)"
+                class="relative w-9 h-5 rounded-full transition-colors duration-200 ml-1"
+                :class="src.enabled ? 'bg-accent' : 'bg-muted'"
+                :aria-pressed="src.enabled"
+              >
+                <span
+                  class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200"
+                  :class="src.enabled ? 'translate-x-4' : ''"
+                ></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 添加自定义音源按钮 -->
+          <button
+            @click="openSourceEditor()"
+            class="w-full flex items-center justify-center gap-2 p-3 rounded-lg border-2 border-dashed border-line hover:border-accent/40 hover:bg-accent/5 transition text-content-3 hover:text-accent-text"
+          >
+            <IconPlus class="w-4 h-4" />
+            <span class="text-sm">添加自定义音源（HTTP API）</span>
+          </button>
+        </div>
+
+        <!-- 自定义音源编辑器 -->
+        <div v-if="showSourceEditor" class="p-4 rounded-lg bg-subtle border border-line-2 space-y-3">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-medium">{{ editingSourceId ? '编辑自定义音源' : '添加自定义音源' }}</p>
+            <button @click="showSourceEditor = false" class="text-content-3 hover:text-content transition">
+              <IconX style="font-size: 16px" />
+            </button>
+          </div>
+          <p class="text-xs text-content-3">支持 {keyword} {page} {limit} {id} {quality} 占位符；JSON 路径用点分隔（如 data.songs）</p>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-content-3 block mb-1">名称 *</label>
+              <input v-model="sourceForm.label" placeholder="我的音源" class="w-full bg-muted border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent/40" />
+            </div>
+            <div>
+              <label class="text-xs text-content-3 block mb-1">搜索 URL</label>
+              <input v-model="sourceForm.searchUrl" placeholder="https://api.example.com/search?kw={keyword}&p={page}&n={limit}" class="w-full bg-muted border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent/40" />
+            </div>
+            <div>
+              <label class="text-xs text-content-3 block mb-1">URL 接口</label>
+              <input v-model="sourceForm.urlApi" placeholder="https://api.example.com/url?id={id}&q={quality}" class="w-full bg-muted border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent/40" />
+            </div>
+            <div>
+              <label class="text-xs text-content-3 block mb-1">搜索结果路径</label>
+              <input v-model="sourceForm.searchPath" placeholder="data.songs" class="w-full bg-muted border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent/40" />
+            </div>
+            <div>
+              <label class="text-xs text-content-3 block mb-1">URL 字段路径</label>
+              <input v-model="sourceForm.urlPath" placeholder="data.url" class="w-full bg-muted border border-line rounded-lg px-3 py-2 text-sm outline-none focus:border-accent/40" />
+            </div>
+          </div>
+
+          <details class="text-xs">
+            <summary class="cursor-pointer text-content-3 hover:text-content transition">字段映射（高级）</summary>
+            <div class="grid grid-cols-3 gap-2 mt-2">
+              <div>
+                <label class="text-content-3 block mb-1">ID 字段</label>
+                <input v-model="sourceForm.idField" placeholder="id" class="w-full bg-muted border border-line rounded-lg px-2 py-1.5 text-xs outline-none focus:border-accent/40" />
+              </div>
+              <div>
+                <label class="text-content-3 block mb-1">歌名字段</label>
+                <input v-model="sourceForm.nameField" placeholder="name" class="w-full bg-muted border border-line rounded-lg px-2 py-1.5 text-xs outline-none focus:border-accent/40" />
+              </div>
+              <div>
+                <label class="text-content-3 block mb-1">歌手字段</label>
+                <input v-model="sourceForm.artistField" placeholder="artist" class="w-full bg-muted border border-line rounded-lg px-2 py-1.5 text-xs outline-none focus:border-accent/40" />
+              </div>
+              <div>
+                <label class="text-content-3 block mb-1">专辑字段</label>
+                <input v-model="sourceForm.albumField" placeholder="album" class="w-full bg-muted border border-line rounded-lg px-2 py-1.5 text-xs outline-none focus:border-accent/40" />
+              </div>
+              <div>
+                <label class="text-content-3 block mb-1">时长字段</label>
+                <input v-model="sourceForm.durationField" placeholder="duration" class="w-full bg-muted border border-line rounded-lg px-2 py-1.5 text-xs outline-none focus:border-accent/40" />
+              </div>
+              <div>
+                <label class="text-content-3 block mb-1">封面字段</label>
+                <input v-model="sourceForm.picField" placeholder="pic" class="w-full bg-muted border border-line rounded-lg px-2 py-1.5 text-xs outline-none focus:border-accent/40" />
+              </div>
+            </div>
+          </details>
+
+          <div class="flex justify-end gap-2">
+            <button @click="showSourceEditor = false" class="px-4 py-2 rounded-lg text-sm bg-muted hover:bg-emphasis text-content-2 transition">取消</button>
+            <button @click="saveSource" :disabled="!sourceForm.label.trim()" class="px-4 py-2 rounded-lg text-sm bg-accent text-white hover:opacity-90 transition disabled:opacity-50">{{ editingSourceId ? '保存' : '添加' }}</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mb-8">
       <h2 class="text-sm text-content-2 uppercase tracking-wider mb-4">皮肤</h2>
       <div class="space-y-4">
         <!-- 明暗切换 -->
@@ -668,10 +827,126 @@ import IconPalette from '~icons/lucide/palette';
 import IconSun from '~icons/lucide/sun';
 import IconMoon from '~icons/lucide/moon';
 import IconImage from '~icons/lucide/image';
+import IconGripVertical from '~icons/lucide/grip-vertical';
+import IconChevronUp from '~icons/lucide/chevron-up';
+import IconChevronDown from '~icons/lucide/chevron-down';
+import IconPencil from '~icons/lucide/pencil';
+import IconTrash2 from '~icons/lucide/trash-2';
+import IconPlus from '~icons/lucide/plus';
 
 const settings = useSettingsStore();
 const { showToast } = useToast();
 const updater = useUpdater();
+
+// ===== 音源管理 =====
+const showSourceEditor = ref(false);
+const editingSourceId = ref<string | null>(null);
+const sourceForm = reactive({
+  label: '',
+  searchUrl: '',
+  urlApi: '',
+  searchPath: 'data.songs',
+  urlPath: 'data.url',
+  idField: 'id',
+  nameField: 'name',
+  artistField: 'artist',
+  albumField: 'album',
+  durationField: 'duration',
+  picField: 'pic',
+});
+
+function openSourceEditor(id?: string) {
+  if (id) {
+    const existing = settings.musicSources.find(s => s.id === id);
+    if (!existing) return;
+    editingSourceId.value = id;
+    sourceForm.label = existing.label;
+    sourceForm.searchUrl = existing.searchUrl || '';
+    sourceForm.urlApi = existing.urlApi || '';
+    sourceForm.searchPath = existing.searchPath || 'data.songs';
+    sourceForm.urlPath = existing.urlPath || 'data.url';
+    sourceForm.idField = existing.idField || 'id';
+    sourceForm.nameField = existing.nameField || 'name';
+    sourceForm.artistField = existing.artistField || 'artist';
+    sourceForm.albumField = existing.albumField || 'album';
+    sourceForm.durationField = existing.durationField || 'duration';
+    sourceForm.picField = existing.picField || 'pic';
+  } else {
+    editingSourceId.value = null;
+    sourceForm.label = '';
+    sourceForm.searchUrl = '';
+    sourceForm.urlApi = '';
+    sourceForm.searchPath = 'data.songs';
+    sourceForm.urlPath = 'data.url';
+    sourceForm.idField = 'id';
+    sourceForm.nameField = 'name';
+    sourceForm.artistField = 'artist';
+    sourceForm.albumField = 'album';
+    sourceForm.durationField = 'duration';
+    sourceForm.picField = 'pic';
+  }
+  showSourceEditor.value = true;
+}
+
+function saveSource() {
+  if (!sourceForm.label.trim()) return;
+  const payload = {
+    label: sourceForm.label.trim(),
+    searchUrl: sourceForm.searchUrl.trim() || undefined,
+    urlApi: sourceForm.urlApi.trim() || undefined,
+    searchPath: sourceForm.searchPath.trim() || undefined,
+    urlPath: sourceForm.urlPath.trim() || undefined,
+    idField: sourceForm.idField.trim() || undefined,
+    nameField: sourceForm.nameField.trim() || undefined,
+    artistField: sourceForm.artistField.trim() || undefined,
+    albumField: sourceForm.albumField.trim() || undefined,
+    durationField: sourceForm.durationField.trim() || undefined,
+    picField: sourceForm.picField.trim() || undefined,
+  };
+  if (editingSourceId.value) {
+    settings.updateMusicSource(editingSourceId.value, payload);
+    showToast('音源已更新', 'success');
+  } else {
+    const id = `custom-${Date.now()}`;
+    settings.addCustomMusicSource({
+      id,
+      enabled: true,
+      kind: 'custom',
+      ...payload,
+    });
+    showToast('音源已添加', 'success');
+  }
+  showSourceEditor.value = false;
+}
+
+function deleteSource(id: string) {
+  settings.removeMusicSource(id);
+  showToast('已删除自定义音源', 'success');
+}
+
+function moveSourceUp(index: number) {
+  if (index === 0) return;
+  settings.moveMusicSource(index, index - 1);
+}
+
+function moveSourceDown(index: number) {
+  if (index >= settings.musicSources.length - 1) return;
+  settings.moveMusicSource(index, index + 1);
+}
+
+// 拖拽排序
+const draggedSourceIndex = ref<number | null>(null);
+function onSourceDragStart(index: number) {
+  draggedSourceIndex.value = index;
+}
+function onSourceDrop(index: number) {
+  if (draggedSourceIndex.value === null || draggedSourceIndex.value === index) return;
+  settings.moveMusicSource(draggedSourceIndex.value, index);
+  draggedSourceIndex.value = null;
+}
+function onSourceDragEnd() {
+  draggedSourceIndex.value = null;
+}
 
 // 主题色选项（7色，不分深浅）
 const themeColorOptions = [

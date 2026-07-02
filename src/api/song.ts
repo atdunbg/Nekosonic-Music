@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { MusicSourceConfig } from '../stores/settings';
 
 /**
  * 歌曲相关 API
@@ -9,8 +10,15 @@ export const SongApi = {
     return invoke('get_song_detail', { id });
   },
 
-  /** 获取歌曲播放 URL */
-  async getSongUrl(query: { id: number; level: string; fm_mode?: boolean }): Promise<string> {
+  /** 获取歌曲播放 URL
+   *  sources: 启用的第三方音源配置列表（按优先级排序），网易云无 URL 时按顺序降级
+   */
+  async getSongUrl(query: {
+    id: number;
+    level: string;
+    fm_mode?: boolean;
+    sources?: MusicSourceConfig[];
+  }): Promise<string> {
     return invoke('get_song_url', { query });
   },
 
@@ -30,7 +38,29 @@ export const SongApi = {
   },
 
   /** 上报听歌记录（scrobble） */
-  async scrobble(query: { id: number; sourceid: string; time: number; alg?: string; source?: string; bitrate?: number }): Promise<void> {
+  async scrobble(query: {
+    id: number;
+    sourceid: string;
+    time: number;
+    alg?: string;
+    source?: string;
+    bitrate?: number;
+  }): Promise<void> {
     return invoke('scrobble', { query });
+  },
+
+  /** 从指定外部音源获取播放 URL（用于搜索结果里来自外部源的歌曲）
+   *  返回 JSON: { url, source, source_label }
+   *  主源失败时会用 songName/artist/allSources 跨源 fallback
+   */
+  async getExternalSongUrl(query: {
+    source: MusicSourceConfig;
+    songId: string;
+    quality?: string;
+    songName?: string;
+    artist?: string;
+    allSources?: MusicSourceConfig[];
+  }): Promise<string> {
+    return invoke('get_external_song_url', { query });
   },
 };

@@ -32,7 +32,16 @@
     </div>
 
     <div class="flex-1 min-w-0">
-      <p class="text-sm font-medium truncate" :class="nameClass">{{ song.name }}</p>
+      <p class="text-sm font-medium truncate flex items-center gap-1.5" :class="nameClass">
+        <span class="truncate">{{ song.name }}</span>
+        <span
+          v-for="tag in songTags"
+          :key="tag.kind"
+          class="text-[10px] leading-none px-1 py-0.5 rounded flex-shrink-0 font-medium"
+          :class="tag.class"
+        >{{ tag.label }}</span>
+        <span v-if="song.sourceLabel" class="text-[10px] px-1 py-0.5 rounded bg-muted text-content-2 flex-shrink-0">{{ song.sourceLabel }}</span>
+      </p>
       <p class="text-xs text-content-2 truncate">
         <template v-if="song.ar?.length">
           <template v-for="(a, i) in song.ar" :key="a.id || i">
@@ -69,7 +78,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { usePlayerStore } from '../stores/player';
 import { useDownload } from '../composables/useDownload';
-import { getCoverUrl, type Song } from '../utils/song';
+import { getCoverUrl, getSongTags, type Song } from '../utils/song';
 import { formatDuration } from '../utils/format';
 import SongItemMenu from './SongItemMenu.vue';
 import IconPlay from '~icons/lucide/play';
@@ -112,4 +121,5 @@ const props = withDefaults(defineProps<{
 const coverClass = computed(() => props.coverSize);
 const coverSrc = computed(() => getCoverUrl(props.song, props.coverSizeParam));
 const nameClass = computed(() => props.isCurrent ? 'text-accent-text' : '');
+const songTags = computed(() => getSongTags(props.song));
 </script>

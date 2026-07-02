@@ -50,14 +50,16 @@ import VirtualSongList from '../components/VirtualSongList.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { usePlayerStore } from '../stores/player';
 import { useUserStore } from '../stores/user';
-import { normalizeSong, type Song } from '../utils/song';
+import { normalizeSongsWithPrivileges, type Song } from '../utils/song';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
+import { useOnlineStatus } from '../composables/useOnlineStatus';
 import IconPlay from '~icons/lucide/play';
 
 defineOptions({ name: 'FavoriteSongsView' });
 
 const player = usePlayerStore();
 const userStore = useUserStore();
+const { isOnline } = useOnlineStatus();
 const songs = ref<Song[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
@@ -89,7 +91,7 @@ async function loadData(force = false) {
     const likePlaylistId = created[0].id;
     const trackJson: string = await MusicApi.playlistTrackAll(likePlaylistId);
     const trackData = JSON.parse(trackJson);
-    songs.value = (trackData.songs || []).map(normalizeSong);
+    songs.value = normalizeSongsWithPrivileges(trackData.songs || [], trackData.privileges);
     pageCacheSet('favoriteSongs', songs.value);
   } catch (e) {
     console.error('加载我喜欢的音乐失败', e);
@@ -109,7 +111,7 @@ onActivated(() => {
   }
 });
 
-watch(() => navigator.onLine, (val, old) => {
+watch(isOnline, (val, old) => {
   if (val && !old && userStore.isLoggedIn && songs.value.length === 0) {
     pageCacheInvalidate('favoriteSongs');
     loadData();

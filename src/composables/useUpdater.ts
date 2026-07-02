@@ -11,14 +11,17 @@ export interface UpdateInfo {
 
 const IGNORED_VERSION_KEY = 'updater_ignored_version'
 
+// 模块级共享状态：所有 useUpdater() 调用返回同一份 ref
+// 否则 App.vue 的弹窗和 Settings.vue 的检查按钮会操作不同的实例，弹窗永远不显示
+const checking = ref(false)
+const downloading = ref(false)
+const downloadProgress = ref(0)
+const updateAvailable = ref(false)
+const updateInfo = ref<UpdateInfo | null>(null)
+const currentVersion = ref('')
+const error = ref('')
+
 export function useUpdater() {
-  const checking = ref(false)
-  const downloading = ref(false)
-  const downloadProgress = ref(0)
-  const updateAvailable = ref(false)
-  const updateInfo = ref<UpdateInfo | null>(null)
-  const currentVersion = ref('')
-  const error = ref('')
 
   async function getCurrentVersion() {
     try {

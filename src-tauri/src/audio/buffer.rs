@@ -198,6 +198,13 @@ impl MediaSource for StreamingReader {
     }
 
     fn byte_len(&self) -> Option<u64> {
-        None
+        // 只有下载完成后才能返回正确的文件总长度
+        // symphonia 需要 byte_len() 来计算 seek 的字节位置
+        let state = self.buffer.state_mutex().lock().unwrap();
+        if state.done {
+            Some(state.bytes.len() as u64)
+        } else {
+            None
+        }
     }
 }

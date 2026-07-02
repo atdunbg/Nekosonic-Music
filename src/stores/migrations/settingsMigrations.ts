@@ -11,7 +11,7 @@
  */
 
 /** 当前 Schema 版本号 */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 /** 迁移函数按目标版本号索引（data 升级到此版本后即为 vN） */
 const migrations: Record<number, (data: any) => any> = {
@@ -78,6 +78,149 @@ const migrations: Record<number, (data: any) => any> = {
       typeof f === 'string' ? { path: f, enabled: true } : f
     );
     delete data.localMusicPaths;
+    return data;
+  },
+
+  /**
+   * v4: 新增第三方音源 fallback 设置
+   *
+   * 老用户没有 musicSourceEnabled / musicSources 字段，
+   * 默认开启总开关，启用 kugou + kuwo（与默认值一致）。
+   */
+  4: (data) => {
+    if (typeof data.musicSourceEnabled !== 'boolean') {
+      data.musicSourceEnabled = true;
+    }
+    if (!Array.isArray(data.musicSources)) {
+      data.musicSources = ['kugou', 'kuwo'];
+    }
+    return data;
+  },
+
+  /**
+   * v5: 音源模型重构
+   *
+   * 旧版 musicSources 是 string[]（仅存音源 id），
+   * 新版改为 MusicSourceConfig[]（含 id/label/enabled/kind 及自定义 HTTP API 字段）。
+   *
+   * 迁移规则：
+   * - 已是对象数组：保留，补齐缺失字段
+   * - 是字符串数组：转换为对象，旧列表里的视为 enabled，bodain（新增波点）默认启用并置于首位
+   * - 不存在或格式不对：使用默认内置音源列表
+   */
+  5: (data) => {
+    // 默认内置音源列表（与 settings.ts 的 builtinMusicSourceDefaults 一致）
+    const BUILTIN_DEFAULTS: Array<{ id: string; label: string; enabled: boolean; kind: 'builtin' }> = [
+      { id: 'bodian', label: '波点音乐', enabled: true, kind: 'builtin' },
+      { id: 'kugou', label: '酷狗音乐', enabled: true, kind: 'builtin' },
+      { id: 'kuwo', label: '酷我音乐', enabled: true, kind: 'builtin' },
+      { id: 'bilibili', label: 'Bilibili 音频', enabled: false, kind: 'builtin' },
+    ];
+    const BUILTIN_LABELS: Record<string, string> = {
+      bodian: '波点音乐',
+      kugou: '酷狗音乐',
+      kuwo: '酷我音乐',
+      bilibili: 'Bilibili 音频',
+    };
+
+    const oldSources = data.musicSources;
+    // 字符串数组 → 对象数组
+    if (Array.isArray(oldSources) && oldSources.length > 0 && typeof oldSources[0] === 'string') {
+      const oldIds = new Set(oldSources.filter((s: any) => typeof s === 'string'));
+      // 波点（bodian）作为新默认首选，老用户没有则补上启用
+      const result: any[] = [];
+      for (const def of BUILTIN_DEFAULTS) {
+        // 老用户已启用的源保持启用；新增的 bodian 默认启用
+        const enabled = oldIds.has(def.id) || def.id === 'bodian' ? true : def.enabled;
+        result.push({ ...def, enabled });
+      }
+      // 老用户列表里可能有自定义源 id（理论上 v4 没有自定义源），保留为 builtin 兜底
+      for (const sid of oldIds) {
+        if (typeof sid !== 'string') continue;
+        if (result.some(r => r.id === sid)) continue;
+        result.push({
+          id: sid,
+          label: BUILTIN_LABELS[sid] || sid,
+          enabled: true,
+          kind: 'builtin',
+        });
+      }
+      data.musicSources = result;
+    } else if (Array.isArray(oldSources) && oldSources.length > 0 && typeof oldSources[0] === 'object') {
+      // 已是对象数组：补齐缺失字段（kind / 默认 label 等）
+      data.musicSources = oldSources.map((s: any) => {
+        if (!s || typeof s !== 'object') return null;
+        const id: string = String(s.id || '');
+        const kind: string = s.kind === 'custom' ? 'custom' : 'builtin';
+        return {
+          id,
+          label: s.label || BUILTIN_LABELS[id] || id,
+          enabled: typeof s.enabled === 'boolean' ? s.enabled : true,
+          kind,
+          ...(kind === 'custom' ? {
+            searchUrl: s.searchUrl,
+            urlApi: s.urlApi,
+            searchPath: s.searchPath,
+            urlPath: s.urlPath,
+            idField: s.idField,
+            nameField: s.nameField,
+            artistField: s.artistField,
+            albumField: s.albumField,
+            durationField: s.durationField,
+            picField: s.picField,
+          } : {}),
+        };
+      }).filter(Boolean);
+      // 老用户对象数组里可能没有 bodian，补上
+      if (!data.musicSources.some((s: any) => s.id === 'bodian')) {
+        data.musicSources.unshift({ id: 'bodian', label: '波点音乐', enabled: true, kind: 'builtin' });
+      }
+    } else {
+      // 不存在或空：使用默认
+      data.musicSources = BUILTIN_DEFAULTS.map(s => ({ ...s }));
+    }
+    return data;
+  },
+
+  /**
+   * v6: 移除已废弃的 bilibili 内置源
+   *
+   * bilibili 接口需 cookie，无 cookie 返回 412，已从内置源列表中删除。
+   * 注意：kuwo 之前因 r.s 接口返回单引号 JSON 解析失败也被移除，
+   * 但现已用 kwDES + mobi.s 接口重写（能绕过 VIP 限制），不再废弃。
+   * 用户如果列表里有 bilibili id，直接过滤掉；自定义源保留。
+   */
+  6: (data) => {
+    if (Array.isArray(data.musicSources)) {
+      data.musicSources = data.musicSources.filter((s: any) =>
+        s && typeof s === 'object' && !(s.kind === 'builtin' && s.id === 'bilibili')
+      );
+    }
+    return data;
+  },
+
+  /**
+   * v7: 恢复 kuwo 内置源
+   *
+   * 之前 v6 错误地把 kuwo 也一并移除了。kuwo 现已用 kwDES 加密 + mobi.s 接口重写，
+   * 能绕过 VIP 限制播放完整歌曲（参考 SPlayer 实现），是播放 VIP 歌曲的关键音源。
+   * 对已升级到 v6（kuwo 被删除）的用户，把 kuwo 加回列表末尾（默认启用）。
+   * 已有 kuwo 的用户不受影响（幂等）。
+   */
+  7: (data) => {
+    if (Array.isArray(data.musicSources)) {
+      const hasKuwo = data.musicSources.some((s: any) =>
+        s && typeof s === 'object' && s.id === 'kuwo' && s.kind === 'builtin'
+      );
+      if (!hasKuwo) {
+        data.musicSources.push({
+          id: 'kuwo',
+          label: '酷我音乐',
+          enabled: true,
+          kind: 'builtin',
+        });
+      }
+    }
     return data;
   },
 };

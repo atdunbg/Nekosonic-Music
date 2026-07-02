@@ -95,6 +95,23 @@ fn stop_playback(output_ctx: &mut Option<OutputContext>, shared_position: &Arc<M
     *shared_position.lock().unwrap() = 0.0;
 }
 
+/// 等待网络流 SharedBuffer 下载完成（用于 seek 前确保 byte_len 可用）。
+/// StreamingReader 的 byte_len() 只有在 done==true 时才返回文件长度，
+/// symphonia 才能计算 seek 的字节位置，否则 seek 会静默失败导致音频从头播放。
+fn wait_for_buffer_done(buffer: &SharedBuffer) {
+    if buffer.is_done() || buffer.is_cancelled() {
+        return;
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while !buffer.is_done() && !buffer.is_cancelled() {
+        if std::time::Instant::now() > deadline {
+            eprintln!("[audio] seek 等待网络流下载超时(3s)");
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
 /// 根据当前播放源（本地文件或网络缓冲区）重建 MediaSourceStream
 fn rebuild_mss(
     local_path: &Option<String>,
@@ -289,6 +306,13 @@ fn audio_thread(
 
                 AudioCmd::Seek(time) => {
                     stop_playback(&mut output_ctx, &shared_position);
+
+                    // 对网络流，等待 SharedBuffer 下载完成后再 seek
+                    if current_local_path.is_none() {
+                        if let Some(ref buffer) = current_audio_buffer {
+                            wait_for_buffer_done(buffer);
+                        }
+                    }
 
                     let mss = match rebuild_mss(&current_local_path, &current_audio_buffer) {
                         Some(mss) => mss,

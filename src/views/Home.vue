@@ -128,7 +128,15 @@
             </div>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium truncate text-content">{{ song.name }}</p>
+            <p class="text-sm font-medium truncate text-content flex items-center gap-1">
+              <span class="truncate">{{ song.name }}</span>
+              <span
+                v-for="tag in getSongTags(song)"
+                :key="tag.kind"
+                class="text-[10px] leading-none px-1 py-0.5 rounded flex-shrink-0 font-medium"
+                :class="tag.class"
+              >{{ tag.label }}</span>
+            </p>
             <p class="text-xs text-content-2 truncate">{{ getArtistDisplay(song) }}</p>
           </div>
           <button
@@ -216,7 +224,7 @@ import { usePlayerStore } from '../stores/player';
 import { useUiStore } from '../stores/ui';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
-import { getCoverUrl, getArtistDisplay, normalizeSong, type Song } from '../utils/song';
+import { getCoverUrl, getArtistDisplay, getSongTags, normalizeSong, type Song } from '../utils/song';
 import PlaylistCard, { type PlaylistCardData } from '../components/Card/PlaylistCard.vue';
 import ArtistCard, { type ArtistCardData } from '../components/Card/ArtistCard.vue';
 import AlbumCard, { type AlbumCardData } from '../components/Card/AlbumCard.vue';

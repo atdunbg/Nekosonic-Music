@@ -20,6 +20,57 @@ export const closeActionLabels: Record<CloseAction, string> = {
   exit: '直接退出',
 };
 
+/**
+ * 音源类型
+ * - builtin: 内置源（bodian/kugou/kuwo/bilibili），由后端实现
+ * - custom: 自定义 HTTP API 源，由用户配置模板 URL + JSON 路径
+ */
+export type MusicSourceKind = 'builtin' | 'custom';
+
+/**
+ * 音源配置（前端持久化、调用后端命令都用这个结构，与后端 SourceConfig 对齐）
+ */
+export interface MusicSourceConfig {
+  /** 唯一 ID（builtin: 'bodian'/'kugou'/...；custom: 'custom-xxxx'） */
+  id: string;
+  /** 显示名称 */
+  label: string;
+  /** 是否启用 */
+  enabled: boolean;
+  /** 类型 */
+  kind: MusicSourceKind;
+
+  // ===== 自定义 HTTP API 源字段（kind === 'custom' 时使用）=====
+  /** 搜索 URL 模板，支持 {keyword} {page} {limit} 占位符 */
+  searchUrl?: string;
+  /** 获取播放 URL 接口，支持 {id} {quality} 占位符 */
+  urlApi?: string;
+  /** JSON 路径：搜索结果数组（如 "data.songs"） */
+  searchPath?: string;
+  /** JSON 路径：URL 字符串字段（如 "data.url"） */
+  urlPath?: string;
+  /** 字段映射（自定义源 JSON 字段名） */
+  idField?: string;
+  nameField?: string;
+  artistField?: string;
+  albumField?: string;
+  durationField?: string;
+  picField?: string;
+}
+
+/**
+ * 内置音源默认配置（顺序即默认优先级，波点为首选，参考 SPlayer）
+ * kuwo 使用 kwDES + mobi.s 接口，能绕过 VIP 限制播放完整歌曲
+ */
+export const builtinMusicSourceDefaults: MusicSourceConfig[] = [
+  { id: 'bodian', label: '波点音乐', enabled: true, kind: 'builtin' },
+  { id: 'kugou', label: '酷狗音乐', enabled: true, kind: 'builtin' },
+  { id: 'kuwo', label: '酷我音乐', enabled: true, kind: 'builtin' },
+];
+
+/** 内置音源 id 集合，用于判断是否可删除 */
+export const builtinSourceIds = new Set(builtinMusicSourceDefaults.map(s => s.id));
+
 export interface ShortcutBinding {
   key: string;
   label: string;
@@ -66,11 +117,15 @@ interface SettingsData {
   shortcuts: Record<string, ShortcutBinding>;
   outputDevice: string | null;
   volume: number;
+  /** 第三方音源总开关 */
+  musicSourceEnabled: boolean;
+  /** 音源列表（有序：搜索聚合顺序 / fallback 优先级；含 builtin + custom） */
+  musicSources: MusicSourceConfig[];
   schemaVersion: number;
 }
 
-function loadSettings(): SettingsData {
-  const defaults: SettingsData = {
+function defaultSettings(): SettingsData {
+  return {
     audioQuality: 'standard',
     downloadPath: '',
     localMusicFolders: [],
@@ -80,15 +135,20 @@ function loadSettings(): SettingsData {
     shortcuts: { ...defaultShortcuts },
     outputDevice: null,
     volume: 100,
+    musicSourceEnabled: true,
+    musicSources: builtinMusicSourceDefaults.map(s => ({ ...s })),
     schemaVersion: CURRENT_SCHEMA_VERSION,
   };
+}
+
+function loadSettings(): SettingsData {
+  const defaults = defaultSettings();
 
   try {
     const raw = localStorage.getItem('app_settings');
     if (!raw) return defaults;
 
     const parsed = JSON.parse(raw);
-    // 执行迁移（theme→skin、wallpaper→customSkin、localMusicPaths→localMusicFolders）
     const migrated = migrateSettings(parsed);
 
     return {
@@ -101,6 +161,8 @@ function loadSettings(): SettingsData {
       shortcuts: { ...defaultShortcuts, ...(migrated.shortcuts || {}) },
       outputDevice: migrated.outputDevice ?? null,
       volume: typeof migrated.volume === 'number' ? migrated.volume : defaults.volume,
+      musicSourceEnabled: typeof migrated.musicSourceEnabled === 'boolean' ? migrated.musicSourceEnabled : defaults.musicSourceEnabled,
+      musicSources: Array.isArray(migrated.musicSources) ? migrated.musicSources : defaults.musicSources,
       schemaVersion: CURRENT_SCHEMA_VERSION,
     };
   } catch { /* 忽略 */ }
@@ -119,17 +181,16 @@ export const useSettingsStore = defineStore('settings', () => {
   const shortcuts = ref<Record<string, ShortcutBinding>>(saved.shortcuts);
   const outputDevice = ref<string | null>(saved.outputDevice);
   const volume = ref<number>(saved.volume);
+  const musicSourceEnabled = ref<boolean>(saved.musicSourceEnabled);
+  const musicSources = ref<MusicSourceConfig[]>(saved.musicSources);
 
-  /** 当前皮肤是否为预设皮肤 */
   const isPreset = computed(() => isPresetSkinId(skin.value));
 
-  /** 获取当前自定义皮肤 */
   const currentCustomSkin = computed(() => {
     if (isPreset.value) return null;
     return customSkins.value.find(s => s.id === skin.value) || null;
   });
 
-  /** 获取当前皮肤的预览色 */
   const skinPreview = computed(() => {
     if (isPreset.value) {
       return getPresetSkin(skin.value)?.preview || '#3b82f6';
@@ -137,7 +198,6 @@ export const useSettingsStore = defineStore('settings', () => {
     return currentCustomSkin.value?.preview || '#3b82f6';
   });
 
-  /** 获取当前皮肤的完整颜色集（响应式） */
   const currentColors = computed<SkinColors>(() => {
     if (isPreset.value) {
       return getPresetSkin(skin.value)!.colors;
@@ -149,7 +209,6 @@ export const useSettingsStore = defineStore('settings', () => {
     return custom.colors;
   });
 
-  /** 获取当前皮肤的壁纸信息 */
   const currentWallpaper = computed(() => {
     if (isPreset.value) return { path: '', blur: 10, opacity: 0.3 };
     const custom = currentCustomSkin.value;
@@ -173,7 +232,6 @@ export const useSettingsStore = defineStore('settings', () => {
     customSkins.value = customSkins.value.map(s =>
       s.id === id ? { ...s, ...updates } : s
     );
-    // 如果正在使用该皮肤，立即刷新 CSS 变量
     if (skin.value === id) {
       applySkin();
     }
@@ -186,7 +244,6 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  /** 应用当前皮肤到 DOM（统一通过 JS 设置 CSS 变量） */
   function applySkin() {
     let colors: SkinColors;
     if (isPreset.value) {
@@ -195,7 +252,6 @@ export const useSettingsStore = defineStore('settings', () => {
     } else {
       const custom = currentCustomSkin.value;
       if (!custom) {
-        // 找不到自定义皮肤，回退到默认
         skin.value = 'dark-blue';
         colors = getPresetSkin('dark-blue')!.colors;
       } else {
@@ -229,7 +285,6 @@ export const useSettingsStore = defineStore('settings', () => {
     );
   }
 
-  /** 已启用的扫描路径 */
   const enabledMusicPaths = computed(() =>
     localMusicFolders.value.filter(f => f.enabled).map(f => f.path)
   );
@@ -250,6 +305,65 @@ export const useSettingsStore = defineStore('settings', () => {
     outputDevice.value = device;
   }
 
+  // ===== 音源管理 =====
+
+  function setMusicSourceEnabled(v: boolean) {
+    musicSourceEnabled.value = v;
+  }
+
+  /** 切换某个音源的启用状态（保持原顺序） */
+  function toggleMusicSource(id: string) {
+    musicSources.value = musicSources.value.map(s =>
+      s.id === id ? { ...s, enabled: !s.enabled } : s
+    );
+  }
+
+  /** 设置某个音源的 enabled 为指定值 */
+  function setMusicSourceEnabledById(id: string, enabled: boolean) {
+    musicSources.value = musicSources.value.map(s =>
+      s.id === id ? { ...s, enabled } : s
+    );
+  }
+
+  /** 调整音源顺序（拖拽排序用）：把 from 移到 to 位置 */
+  function moveMusicSource(from: number, to: number) {
+    if (from < 0 || to < 0 || from >= musicSources.value.length) return;
+    const arr = [...musicSources.value];
+    const [item] = arr.splice(from, 1);
+    arr.splice(Math.min(to, arr.length), 0, item);
+    musicSources.value = arr;
+  }
+
+  /** 添加自定义音源 */
+  function addCustomMusicSource(cfg: MusicSourceConfig) {
+    if (musicSources.value.some(s => s.id === cfg.id)) return;
+    musicSources.value = [...musicSources.value, cfg];
+  }
+
+  /** 更新自定义音源配置 */
+  function updateMusicSource(id: string, updates: Partial<MusicSourceConfig>) {
+    musicSources.value = musicSources.value.map(s =>
+      s.id === id ? { ...s, ...updates, id: s.id, kind: s.kind } : s
+    );
+  }
+
+  /** 删除音源（内置源不可删除，只能禁用） */
+  function removeMusicSource(id: string) {
+    if (builtinSourceIds.has(id)) return;
+    musicSources.value = musicSources.value.filter(s => s.id !== id);
+  }
+
+  /** 恢复默认音源列表（保留用户已有的自定义源） */
+  function resetMusicSourcesToDefault() {
+    const customs = musicSources.value.filter(s => s.kind === 'custom');
+    musicSources.value = [...builtinMusicSourceDefaults.map(s => ({ ...s })), ...customs];
+  }
+
+  /** 当前已启用的音源列表（含总开关检查，传给后端搜索/降级用） */
+  const enabledMusicSources = computed(() =>
+    musicSourceEnabled.value ? musicSources.value.filter(s => s.enabled) : []
+  );
+
   function resetAll() {
     audioQuality.value = 'standard';
     downloadPath.value = '';
@@ -260,9 +374,11 @@ export const useSettingsStore = defineStore('settings', () => {
     shortcuts.value = { ...defaultShortcuts };
     outputDevice.value = null;
     volume.value = 100;
+    musicSourceEnabled.value = true;
+    musicSources.value = builtinMusicSourceDefaults.map(s => ({ ...s }));
   }
 
-  watch([audioQuality, downloadPath, localMusicFolders, skin, customSkins, closeAction, shortcuts, outputDevice, volume], () => {
+  watch([audioQuality, downloadPath, localMusicFolders, skin, customSkins, closeAction, shortcuts, outputDevice, volume, musicSourceEnabled, musicSources], () => {
     const data: SettingsData = {
       audioQuality: audioQuality.value,
       downloadPath: downloadPath.value,
@@ -273,6 +389,8 @@ export const useSettingsStore = defineStore('settings', () => {
       shortcuts: shortcuts.value,
       outputDevice: outputDevice.value,
       volume: volume.value,
+      musicSourceEnabled: musicSourceEnabled.value,
+      musicSources: musicSources.value,
       schemaVersion: CURRENT_SCHEMA_VERSION,
     };
     localStorage.setItem('app_settings', JSON.stringify(data));
@@ -294,6 +412,9 @@ export const useSettingsStore = defineStore('settings', () => {
     shortcuts,
     outputDevice,
     volume,
+    musicSourceEnabled,
+    musicSources,
+    enabledMusicSources,
     setSkin,
     addCustomSkin,
     updateCustomSkin,
@@ -306,6 +427,14 @@ export const useSettingsStore = defineStore('settings', () => {
     toggleLocalMusicFolder,
     setCloseAction,
     setOutputDevice,
+    setMusicSourceEnabled,
+    toggleMusicSource,
+    setMusicSourceEnabledById,
+    moveMusicSource,
+    addCustomMusicSource,
+    updateMusicSource,
+    removeMusicSource,
+    resetMusicSourcesToDefault,
     setShortcut,
     resetShortcuts,
     resetAll,

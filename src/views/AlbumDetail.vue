@@ -186,7 +186,7 @@ import { ref, computed, onMounted, watch, onActivated } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
-import { normalizeSong, type Song } from '../utils/song';
+import { normalizeSongsWithPrivileges, type Song } from '../utils/song';
 import { formatDate } from '../utils/format';
 import { pageCacheGet, pageCacheSet } from '../composables/usePageCache';
 import VirtualSongList from '../components/VirtualSongList.vue';
@@ -274,7 +274,7 @@ async function fetchAlbum(id: number, force = false) {
     const data = JSON.parse(jsonStr);
     album.value = data.album;
     albumLoading.value = false;
-    songs.value = (data.songs || []).map(normalizeSong);
+    songs.value = normalizeSongsWithPrivileges(data.songs || [], data.privileges);
     songsLoading.value = false;
     pageCacheSet(cacheKey, { album: album.value, songs: songs.value });
   } catch (e) {

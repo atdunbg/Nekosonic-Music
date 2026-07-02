@@ -1,56 +1,5 @@
 <template>
-  <div class="p-8 text-content" @click="showSuggestions = false">
-    <div class="relative mb-6" @click.stop>
-      <div class="flex items-center gap-3">
-        <div class="relative flex-1">
-          <IconSearch class="absolute left-3.5 top-1/2 -translate-y-1/2 text-content-3 w-[18px] h-[18px]" />
-          <input
-            ref="searchInput"
-            v-model="keyword"
-            @input="onInputChange"
-            @keydown.enter="handleSearch"
-            @focus="onInputFocus"
-            placeholder="搜索歌曲、歌手、专辑..."
-            class="w-full rounded-xl bg-muted pl-10 pr-10 py-3 text-content placeholder-content-3 outline-none focus:bg-subtle focus:ring-1 focus:ring-accent/30 transition"
-          />
-          <button v-if="keyword" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-content-3 hover:text-content transition">
-            <IconX class="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      <div v-if="showSuggestions && !hasSearched"
-        class="absolute z-30 left-0 right-0 top-full mt-2 bg-surface border border-line-2 rounded-xl shadow-xl overflow-hidden max-h-[60vh] overflow-y-auto">
-        <div v-if="suggestions.length" class="p-2">
-          <p class="text-xs text-content-3 px-3 py-1.5">搜索建议</p>
-          <button v-for="s in suggestions" :key="s" @click="searchTag(s)"
-            class="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-muted transition flex items-center gap-2">
-            <IconSearch style="font-size: 14px" class="text-content-3 flex-shrink-0" />
-            <span>{{ s }}</span>
-          </button>
-        </div>
-        <div v-if="searchHistory.length && !suggestions.length" class="p-2">
-          <div class="flex items-center justify-between px-3 py-1.5">
-            <p class="text-xs text-content-3">搜索历史</p>
-            <button @click.stop="clearHistory" class="text-xs text-content-3 hover:text-danger transition">清空</button>
-          </div>
-          <button v-for="h in searchHistory" :key="h" @click="searchTag(h)"
-            class="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-muted transition flex items-center gap-2">
-            <IconHistory style="font-size: 14px" class="text-content-3 flex-shrink-0" />
-            <span>{{ h }}</span>
-          </button>
-        </div>
-        <div v-if="hotTags.length && !suggestions.length && !searchHistory.length" class="p-2">
-          <p class="text-xs text-content-3 px-3 py-1.5">热门搜索</p>
-          <button v-for="tag in hotTags" :key="tag.searchWord" @click="searchTag(tag.searchWord)"
-            class="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-muted transition flex items-center gap-2">
-            <IconClock style="font-size: 14px" class="text-content-3 flex-shrink-0" />
-            <span>{{ tag.searchWord }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
+  <div class="p-8 text-content">
     <div v-if="!hasSearched && !loading && hotTags.length" class="mb-6">
       <h2 class="text-sm font-semibold mb-3">🔥 热门搜索</h2>
       <div class="flex flex-wrap gap-2">
@@ -143,34 +92,48 @@
 <script setup lang="ts">
 defineOptions({ name: 'DiscoverView' });
 
-import { ref, computed, onMounted, onActivated, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onActivated, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { MusicApi } from '../api';
 import { usePlayerStore } from '../stores/player';
+import { useSettingsStore } from '../stores/settings';
 import SongListItem from '../components/SongListItem.vue';
 import { normalizeSong, type Song } from '../utils/song';
 import { formatDate } from '../utils/format';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
 import { useOnlineStatus } from '../composables/useOnlineStatus';
-import IconSearch from '~icons/lucide/search';
-import IconX from '~icons/lucide/x';
-import IconHistory from '~icons/lucide/history';
-import IconClock from '~icons/lucide/clock';
 import IconUserRound from '~icons/lucide/user-round';
 import IconDisc from '~icons/lucide/disc';
 
 const router = useRouter();
 const route = useRoute();
 const player = usePlayerStore();
+const settings = useSettingsStore();
 const { isOnline } = useOnlineStatus();
 
-const searchInput = ref<HTMLInputElement | null>(null);
-const keyword = ref('');
+/** 外部音源歌曲 ID 计数器（生成唯一负数占位 ID） */
+let externalIdCounter = -1;
+/** 将后端 ExternalSong 转为前端 Song 结构 */
+function externalSongToSong(ext: any): Song {
+  const artistStr: string = ext.artist || '';
+  const ar = artistStr
+    ? artistStr.split(/[\/,;&|]/).map((name: string) => ({ name: name.trim() })).filter((a: any) => a.name)
+    : [];
+  return {
+    id: externalIdCounter--,
+    name: ext.name || '未知歌曲',
+    ar,
+    al: { picUrl: ext.pic_url || '', name: ext.album || undefined },
+    dt: ext.duration || 0,
+    externalId: String(ext.id || ''),
+    externalSourceId: ext.source || '',
+    sourceLabel: ext.source_label || '',
+  };
+}
+
 const loading = ref(false);
 const hasSearched = ref(false);
 const hotTags = ref<any[]>([]);
-const suggestions = ref<string[]>([]);
-const showSuggestions = ref(false);
 const activeTab = ref(1);
 const cacheError = ref(false);
 
@@ -194,60 +157,6 @@ const tabs = [
   { type: 10, label: '专辑' },
 ];
 
-const HISTORY_KEY = 'search_history';
-const MAX_HISTORY = 15;
-
-function loadSearchHistory(): string[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* 忽略 */ }
-  return [];
-}
-
-function saveSearchHistory(q: string) {
-  let history = loadSearchHistory();
-  history = history.filter(h => h !== q);
-  history.unshift(q);
-  if (history.length > MAX_HISTORY) history = history.slice(0, MAX_HISTORY);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-}
-
-const searchHistory = ref<string[]>(loadSearchHistory());
-
-function clearHistory() {
-  searchHistory.value = [];
-  localStorage.removeItem(HISTORY_KEY);
-}
-
-let suggestTimer: ReturnType<typeof setTimeout> | null = null;
-
-function onInputChange() {
-  if (suggestTimer) clearTimeout(suggestTimer);
-  if (!keyword.value.trim()) {
-    suggestions.value = [];
-    showSuggestions.value = true;
-    return;
-  }
-  suggestTimer = setTimeout(async () => {
-    try {
-      const jsonStr: string = await MusicApi.searchSuggest(keyword.value.trim());
-      const data = JSON.parse(jsonStr);
-      const all = data.result?.allMatch || [];
-      suggestions.value = all.map((m: any) => m.keyword).slice(0, 8);
-      showSuggestions.value = true;
-    } catch {
-      suggestions.value = [];
-    }
-  }, 300);
-}
-
-function onInputFocus() {
-  if (!hasSearched.value) {
-    showSuggestions.value = true;
-  }
-}
-
 async function loadHotTags() {
   const cached = pageCacheGet('discover_hotTags');
   if (cached) {
@@ -264,23 +173,18 @@ async function loadHotTags() {
 
 onMounted(async () => {
   await loadHotTags();
-  const q = route.query.q as string;
-  if (q) {
-    keyword.value = q;
-    await handleSearch();
-    router.replace({ query: {} });
-  }
 });
 
 onActivated(async () => {
   if (pageCacheIsStale('discover_hotTags')) loadHotTags();
-  const q = route.query.q as string;
-  if (q && q !== lastSearchKeyword.value) {
-    keyword.value = q;
-    await handleSearch();
-    router.replace({ query: {} });
-  }
 });
+
+// 监听路由搜索参数变化（immediate 处理首次加载，_t 时间戳确保相同关键词也能重复搜索）
+watch(() => [route.query.q, route.query._t], async ([q]) => {
+  if (q && typeof q === 'string') {
+    await handleSearch(q);
+  }
+}, { immediate: true });
 
 watch(isOnline, (val, old) => {
   if (val && !old && hotTags.value.length === 0) {
@@ -289,18 +193,12 @@ watch(isOnline, (val, old) => {
   }
 });
 
-async function handleSearch() {
-  const q = keyword.value.trim();
-  if (!q) return;
-  showSuggestions.value = false;
+async function handleSearch(q: string) {
+  const query = q.trim();
+  if (!query) return;
   hasSearched.value = true;
   cacheError.value = false;
-  saveSearchHistory(q);
-  searchHistory.value = loadSearchHistory();
-
-  if (q === lastSearchKeyword.value && resultCache.value.size > 0) return;
-
-  lastSearchKeyword.value = q;
+  lastSearchKeyword.value = query;
   resultCache.value.clear();
 
   await Promise.all([
@@ -311,21 +209,56 @@ async function handleSearch() {
 }
 
 async function fetchTabResults(type: number) {
+  const dedupeKey = (s: Song) => `${s.name.toLowerCase()}|${(s.ar?.[0]?.name || '').toLowerCase()}`;
   const entry = resultCache.value.get(type);
   if (entry && !entry.dirty) return;
 
   loading.value = true;
   cacheError.value = false;
   try {
-    const jsonStr: string = await MusicApi.cloudsearch({
+    // 网易云搜索
+    const cloudsearchPromise = MusicApi.cloudsearch({
       keyword: lastSearchKeyword.value, searchType: type, limit: 30
     });
+
+    // 多源聚合搜索（仅歌曲 tab，且音源补充开启且有启用源时）
+    const canMultiSearch = type === 1
+      && settings.musicSourceEnabled
+      && settings.enabledMusicSources.length > 0;
+    const multiSearchPromise = canMultiSearch
+      ? MusicApi.searchSongsMulti({
+          keyword: lastSearchKeyword.value,
+          sources: settings.enabledMusicSources,
+          limit: 20,
+        }).catch(() => '[]')
+      : Promise.resolve('[]');
+
+    const [jsonStr, externalJsonStr] = await Promise.all([cloudsearchPromise, multiSearchPromise]);
+
     const data = JSON.parse(jsonStr);
     const result = data.result || {};
 
     let items: any[] = [];
     if (type === 1) {
-      items = (result.songs || []).map(normalizeSong);
+      const neteaseSongs: Song[] = (result.songs || []).map(normalizeSong);
+      // 外部音源结果（如 QQ 音乐独占歌曲，通过 bodian/kugou/kuwo 等源搜到）
+      const externalSongs: Song[] = (JSON.parse(externalJsonStr) || []).map(externalSongToSong);
+      // 去重1：外部源中与网易云「歌名+歌手」都匹配的歌曲跳过，保留网易云版本
+      // 只按歌名匹配会误杀——例如网易云有别的「定玄」，会把酷我的原版也过滤掉
+      const neteaseKeys = new Set(neteaseSongs.map(dedupeKey));
+      const externalFiltered = externalSongs.filter(s => {
+        const key = dedupeKey(s);
+        return !neteaseKeys.has(key);
+      });
+      // 去重2：外部源之间也可能搜到同一首（如 kuwo 和 bodian 都有），保留第一个
+      const seenExternal = new Set<string>();
+      const dedupedExternal = externalFiltered.filter(s => {
+        const key = dedupeKey(s);
+        if (seenExternal.has(key)) return false;
+        seenExternal.add(key);
+        return true;
+      });
+      items = [...neteaseSongs, ...dedupedExternal];
     } else if (type === 100) {
       items = result.artists || [];
     } else if (type === 10) {
@@ -353,18 +286,7 @@ async function switchTab(type: number) {
 }
 
 function searchTag(tag: string) {
-  keyword.value = tag;
-  handleSearch();
-}
-
-function clearSearch() {
-  keyword.value = '';
-  hasSearched.value = false;
-  resultCache.value.clear();
-  lastSearchKeyword.value = '';
-  cacheError.value = false;
-  suggestions.value = [];
-  showSuggestions.value = true;
-  nextTick(() => searchInput.value?.focus());
+  // 通过路由跳转触发搜索（带时间戳确保相同关键词也能重复搜索）
+  router.push({ name: 'discover', query: { q: tag, _t: String(Date.now()) } });
 }
 </script>

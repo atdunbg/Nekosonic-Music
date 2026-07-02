@@ -165,7 +165,8 @@ pub async fn cloudsearch(query: CloudSearchQuery, state: State<'_, ApiController
 /// 搜索建议
 #[tauri::command]
 pub async fn search_suggest(query: SearchSuggestQuery, state: State<'_, ApiController>) -> Result<String, String> {
-    api_call!(state, search_suggest, params: [("keywords", &query.keyword)])
+    // type=mobile 返回 allMatch 格式（纯关键词列表），不传 type 会返回 albums/songs 等详细字段
+    api_call!(state, search_suggest, params: [("keywords", &query.keyword), ("type", "mobile")])
 }
 
 /// 获取热搜词列表
@@ -185,8 +186,14 @@ pub async fn playlist_track_all(query: PlaylistTrackAllQuery, state: State<'_, A
 }
 
 /// 歌曲播放地址查询参数
+/// sources: 启用的第三方音源配置列表（按优先级排序），网易云无 URL 时按顺序降级
 #[derive(Deserialize)]
-pub struct SongUrlQuery { pub id: u64, pub level: Option<String>, pub fm_mode: Option<bool> }
+pub struct SongUrlQuery {
+    pub id: u64,
+    pub level: Option<String>,
+    pub fm_mode: Option<bool>,
+    pub sources: Option<Vec<crate::music_sources::SourceConfig>>,
+}
 
 /// 获取歌曲播放地址（返回完整 data 对象，包含 url、freeTrialInfo 等）
 #[tauri::command]
@@ -230,10 +237,152 @@ pub async fn get_song_url(query: SongUrlQuery, state: State<'_, ApiController>) 
 
     let data = &resp.body["data"][0];
     let url = data["url"].as_str().filter(|s| !s.is_empty());
-    if url.is_none() {
+    // VIP 试听片段标记：存在说明网易云返回的只是试听 URL，需走音源补充获取完整 URL
+    let has_free_trial = data["freeTrialInfo"].is_object();
+
+    // 网易云有可用 URL 且非试听片段，直接返回
+    if url.is_some() && !has_free_trial {
+        return Ok(data.to_string());
+    }
+
+    // URL 为空 或 VIP 试听片段：尝试音源 fallback
+    let sources = query.sources.unwrap_or_default();
+    if sources.is_empty() {
+        // 没有配置音源：有 URL（试听）就返回试听，否则报错
+        if url.is_some() {
+            return Ok(data.to_string());
+        }
         return Err("暂无播放源".into());
     }
-    Ok(data.to_string())
+
+    // 获取歌曲信息用于搜索
+    let detail_q = state.build_query().param("ids", &query.id.to_string());
+    let detail_resp = client.song_detail(&detail_q).await
+        .map_err(|e| format!("获取歌曲详情失败: {}", e))?;
+    let song_info = &detail_resp.body["songs"][0];
+    let song_name = song_info["name"].as_str().unwrap_or("");
+    let artist_str: String = song_info["ar"].as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|a| a["name"].as_str())
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .unwrap_or_default();
+
+    match crate::music_sources::fallback_get_url(song_name, &artist_str, level, &sources).await {
+        Ok((fb_url, source_label)) => {
+            let mut data_obj = data.clone();
+            data_obj["url"] = json!(fb_url);
+            data_obj["source"] = json!(source_label);
+            data_obj["br"] = json!(320000);
+            // 清除试听标记，使用音源补充的完整 URL
+            if let Some(obj) = data_obj.as_object_mut() {
+                obj.remove("freeTrialInfo");
+            }
+            Ok(data_obj.to_string())
+        }
+        Err(_) => {
+            // fallback 失败：有试听 URL 就返回试听，否则报错
+            if url.is_some() {
+                return Ok(data.to_string());
+            }
+            Err("暂无播放源".into())
+        }
+    }
+}
+
+/// 多源聚合搜索查询参数
+#[derive(Deserialize)]
+pub struct SearchMultiQuery {
+    pub keyword: String,
+    pub sources: Vec<crate::music_sources::SourceConfig>,
+    pub limit: Option<u32>,
+}
+
+/// 多源聚合搜索：并发请求所有启用音源，合并结果返回
+/// 用于「网易云搜不到的歌，从其他音源补充搜索结果」场景
+#[tauri::command]
+pub async fn search_songs_multi(query: SearchMultiQuery) -> Result<String, String> {
+    let limit = query.limit.unwrap_or(20);
+    let results = crate::music_sources::search_multi(&query.keyword, &query.sources, limit).await;
+    serde_json::to_string(&results).map_err(|e| e.to_string())
+}
+
+/// 外部音源获取播放 URL 查询参数
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalUrlQuery {
+    pub source: crate::music_sources::SourceConfig,
+    pub song_id: String,
+    pub quality: Option<String>,
+    /// 歌曲名（用于主源失败时跨源 fallback）
+    #[serde(default)]
+    pub song_name: Option<String>,
+    /// 歌手（用于跨源 fallback 精确匹配）
+    #[serde(default)]
+    pub artist: Option<String>,
+    /// 所有启用的音源（主源失败时按顺序尝试其他源）
+    #[serde(default)]
+    pub all_sources: Option<Vec<crate::music_sources::SourceConfig>>,
+}
+
+/// 从指定外部音源获取播放 URL
+/// 用于「点击搜索结果中来自某外部源的歌曲，直接通过该源取 URL 播放」
+///
+/// 流程：
+/// 1. 先用主源（query.source）直接取 URL（已有 song_id，最快）
+/// 2. 主源失败时，用歌名+歌手在 all_sources 里 fallback 搜索
+///    （例如 kugou 的 VIP 歌曲无 URL，换 bodian/kuwo 找同款）
+#[tauri::command]
+pub async fn get_external_song_url(query: ExternalUrlQuery) -> Result<String, String> {
+    let quality = query.quality.unwrap_or_else(|| "standard".into());
+
+    // 1. 主源直接取 URL（已有 song_id，最快路径）
+    let src = crate::music_sources::get_source(&query.source)
+        .ok_or_else(|| format!("未知音源: {} ({})", query.source.id, query.source.kind))?;
+    let primary_id = &query.source.id;
+    let primary_label = &query.source.label;
+
+    match src.get_url(&query.song_id, &quality).await {
+        Ok(url) if !url.is_empty() => {
+            let resp = json!({
+                "url": url,
+                "source": primary_id,
+                "source_label": primary_label,
+            });
+            return Ok(resp.to_string());
+        }
+        Ok(_) => {} // 空 URL，走 fallback
+        Err(e) => {
+            eprintln!("[music_sources] {} 取URL失败，尝试跨源 fallback: {}", primary_id, e);
+        }
+    }
+
+    // 2. 主源失败，用歌名+歌手在其他启用源里 fallback
+    let song_name = match query.song_name.as_deref() {
+        Some(n) if !n.is_empty() => n,
+        _ => return Err(format!("{} 无法获取播放URL且缺少歌名无法 fallback", primary_id)),
+    };
+    let artist = query.artist.as_deref().unwrap_or("");
+    let all_sources = query.all_sources.unwrap_or_default();
+
+    if all_sources.is_empty() {
+        return Err(format!("{} 无法获取播放URL且无备用源", primary_id));
+    }
+
+    match crate::music_sources::fallback_get_url(song_name, artist, &quality, &all_sources).await {
+        Ok((url, label)) => {
+            eprintln!("[music_sources] 跨源 fallback 成功: {} -> {}", song_name, label);
+            let resp = json!({
+                "url": url,
+                "source": "fallback",
+                "source_label": label,
+            });
+            Ok(resp.to_string())
+        }
+        Err(e) => Err(format!("{} 跨源 fallback 失败: {}", primary_id, e)),
+    }
 }
 
 /// 获取歌词

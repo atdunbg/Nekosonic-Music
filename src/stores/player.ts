@@ -36,8 +36,10 @@ export const usePlayerStore = defineStore('player', () => {
   const { addRecent } = recentStore;
 
   let tickInterval: ReturnType<typeof setInterval> | null = null;
+  let tickGeneration = 0;
   function clearTick() {
     if (tickInterval) { clearInterval(tickInterval); tickInterval = null; }
+    tickGeneration++;
   }
   function setTick(v: ReturnType<typeof setInterval>) {
     tickInterval = v;
@@ -153,7 +155,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   async function playFmSong(song: Song) {
     const seq = ++_playSeq;
-    _switchingSong = true;
+    switching.value = true;
     clearTick();
     reportScrobble();
     if (!song.dt || song.dt === 0) {
@@ -169,7 +171,7 @@ export const usePlayerStore = defineStore('player', () => {
       } catch { /* 忽略 */ }
     }
 
-    await AudioApi.stopAudio();
+    if (!(await stopAndWaitStopped(seq))) return;
     queue.value = [];
     currentIndex.value = -1;
     playing.value = false;
@@ -177,10 +179,11 @@ export const usePlayerStore = defineStore('player', () => {
     fmSong.value = song;
     currentSong.value = song;
     try {
-      const jsonStr = await MusicApi.getSongUrl({ id: Number(song.id), level: settings.audioQuality, fm_mode: true });
+      const data = await loadSongUrl(song, true);
       if (seq !== _playSeq) return;
-      const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
+      // 记录实际播放音源（netease / 波点音乐 / 酷狗音乐 / ...）
+      if (data.source) song.source = data.source;
       if (!url) {
         const fee = data.fee;
         if (fee === 4) {
@@ -196,7 +199,7 @@ export const usePlayerStore = defineStore('player', () => {
           disableFmMode();
           return;
         }
-        _switchingSong = false;
+        switching.value = false;
         if (fmNextCallback) {
           fmNextCallback();
         } else {
@@ -215,7 +218,7 @@ export const usePlayerStore = defineStore('player', () => {
           disableFmMode();
           return;
         }
-        _switchingSong = false;
+        switching.value = false;
         if (fmNextCallback) {
           fmNextCallback();
         } else {
@@ -230,12 +233,7 @@ export const usePlayerStore = defineStore('player', () => {
       const started = await waitForPlaybackStart();
       if (seq !== _playSeq) return;
       if (started) {
-        playing.value = true;
-        duration.value = (song.dt || 0) / 1000;
-        currentTime.value = 0;
-        startTick();
-        addRecent(song);
-        emitPlaybackState();
+        onPlaybackStarted(song, true);
       } else {
         playing.value = false;
         showToast('FM 播放启动超时，仍在尝试加载…', 'info');
@@ -253,7 +251,7 @@ export const usePlayerStore = defineStore('player', () => {
       }
     } finally {
       if (seq === _playSeq) {
-        _switchingSong = false;
+        switching.value = false;
       }
     }
   }
@@ -313,9 +311,30 @@ export const usePlayerStore = defineStore('player', () => {
   const MAX_VIP_SKIP = 10;
 
   let _playSeq = 0;
-  let _switchingSong = false;
+  const switching = ref(false);
 
-  async function waitForPlaybackStart(timeoutMs: number = 5000): Promise<boolean> {
+  /// 停止后端播放并等待 is_playing 变为 false（最多 1.5s）。
+  /// 替代音源的 loadSongUrl（跨源 fallback）耗时可能数秒，
+  /// 若不先停止旧歌，期间后端 is_playing 仍为 true、shared_position 持续增长，
+  /// 之后 waitForPlaybackStart 会误判旧歌的 is_playing=true 为新歌启动，
+  /// 导致 startTick 后 tick 读取旧歌的 position 覆盖 currentTime（进度条不从零开始）。
+  /// 返回 false 表示 seq 已过期，调用方应立即 return。
+  async function stopAndWaitStopped(seq: number): Promise<boolean> {
+    try { await AudioApi.stopAudio(); } catch { /* 忽略 */ }
+    const deadline = Date.now() + 1500;
+    while (Date.now() < deadline) {
+      if (seq !== _playSeq) return false;
+      try {
+        if (!(await AudioApi.isAudioPlaying())) return true;
+      } catch { return true; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return true;
+  }
+
+  /// 等待新播放启动（is_playing 变为 true）。
+  /// 调用方须先用 stopAndWaitStopped 确保旧播放已停止，否则可能命中旧歌的 true。
+  async function waitForPlaybackStart(timeoutMs: number = 8000): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 100));
@@ -328,15 +347,76 @@ export const usePlayerStore = defineStore('player', () => {
     } catch { return false; }
   }
 
+  /// 播放启动成功后的统一处理：设置状态、启动 tick、记录最近播放、上报状态
+  function onPlaybackStarted(song: Song, isFm: boolean) {
+    playing.value = true;
+    if (isFm) duration.value = (song.dt || 0) / 1000;
+    currentTime.value = 0;
+    startTick();
+    addRecent(song);
+    vipSkipCount = 0;
+    emitPlaybackState();
+  }
+
+  /**
+   * 统一获取播放 URL：外部音源歌曲走 getExternalSongUrl，网易云走 getSongUrl（含 fallback）
+   * 返回结构兼容网易云 data 对象（url/source/fee/freeTrialInfo）
+   */
+  async function loadSongUrl(song: Song, fmMode = false): Promise<{ url?: string; source?: string; fee?: number; freeTrialInfo?: any }> {
+    // 外部音源歌曲：直接通过对应源取 URL，失败时后端会跨源 fallback
+    if (song.externalSourceId && song.externalId) {
+      const sourceCfg = settings.musicSources.find(s => s.id === song.externalSourceId);
+      if (!sourceCfg) {
+        console.warn('外部音源配置未找到:', song.externalSourceId);
+        return { url: undefined };
+      }
+      try {
+        const json = await MusicApi.getExternalSongUrl({
+          source: sourceCfg,
+          songId: song.externalId,
+          quality: settings.audioQuality,
+          songName: song.name,
+          artist: song.ar?.map(a => a.name).join(' / ') || '',
+          allSources: settings.enabledMusicSources,
+        });
+        const data = JSON.parse(json);
+        return {
+          url: data.url,
+          source: data.source_label || sourceCfg.label,
+        };
+      } catch (e) {
+        console.error('外部音源获取URL失败:', e);
+        return { url: undefined };
+      }
+    }
+    // 网易云流程（含 fallback）
+    const jsonStr = await MusicApi.getSongUrl({
+      id: Number(song.id),
+      level: settings.audioQuality,
+      fm_mode: fmMode,
+      sources: settings.enabledMusicSources,
+    });
+    const data = JSON.parse(jsonStr);
+    return {
+      url: data.url,
+      source: data.source,
+      fee: data.fee,
+      freeTrialInfo: data.freeTrialInfo,
+    };
+  }
+
   async function playCurrent() {
     const seq = ++_playSeq;
-    _switchingSong = true;
+    switching.value = true;
     clearTick();
     reportScrobble();
+
+    if (!(await stopAndWaitStopped(seq))) return;
+
     const song = queue.value[currentIndex.value];
     if (!song?.id) {
       console.error('无效的歌曲数据', song);
-      _switchingSong = false;
+      switching.value = false;
       return;
     }
 
@@ -352,10 +432,7 @@ export const usePlayerStore = defineStore('player', () => {
         const started = await waitForPlaybackStart();
         if (seq !== _playSeq) return;
         if (started) {
-          playing.value = true;
-          startTick();
-          addRecent(song);
-          emitPlaybackState();
+          onPlaybackStarted(song, false);
         } else {
           showToast('播放启动超时，仍在尝试加载…', 'info');
           watchForLatePlayback(seq, song);
@@ -363,10 +440,11 @@ export const usePlayerStore = defineStore('player', () => {
         return;
       }
 
-      const jsonStr = await MusicApi.getSongUrl({ id: Number(song.id), level: settings.audioQuality });
+      const data = await loadSongUrl(song, false);
       if (seq !== _playSeq) return;
-      const data = JSON.parse(jsonStr);
       const url: string | undefined = data.url;
+      // 记录实际播放音源（netease / 波点音乐 / 酷狗音乐 / ...）
+      if (data.source) song.source = data.source;
 
       if (!url) {
         // url 为空：可能是数字专辑/付费歌曲，根据 fee 字段判断
@@ -383,7 +461,7 @@ export const usePlayerStore = defineStore('player', () => {
           vipSkipCount = 0;
           return;
         }
-        _switchingSong = false;
+        switching.value = false;
         next();
         return;
       }
@@ -397,7 +475,7 @@ export const usePlayerStore = defineStore('player', () => {
           vipSkipCount = 0;
           return;
         }
-        _switchingSong = false;
+        switching.value = false;
         next();
         return;
       }
@@ -407,11 +485,7 @@ export const usePlayerStore = defineStore('player', () => {
       const started = await waitForPlaybackStart();
       if (seq !== _playSeq) return;
       if (started) {
-        playing.value = true;
-        startTick();
-        addRecent(song);
-        vipSkipCount = 0;
-        emitPlaybackState();
+        onPlaybackStarted(song, false);
       } else {
         playing.value = false;
         showToast('播放启动超时，仍在尝试加载…', 'info');
@@ -424,7 +498,7 @@ export const usePlayerStore = defineStore('player', () => {
       showToast('播放失败，请稍后重试', 'error');
     } finally {
       if (seq === _playSeq) {
-        _switchingSong = false;
+        switching.value = false;
       }
     }
   }
@@ -461,6 +535,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   function startTick() {
     clearTick();
+    const gen = tickGeneration;
     let seekGuard = false;
     onSeekStart = () => { seekGuard = true; };
     let syncCounter = 1;
@@ -468,6 +543,7 @@ export const usePlayerStore = defineStore('player', () => {
     let backendFrozen = false;
     let stateSyncCounter = 0;
     setTick(setInterval(async () => {
+      if (gen !== tickGeneration) return;
       if (playing.value && duration.value > 0) {
         if (seekGuard) return;
         syncCounter++;
@@ -476,6 +552,7 @@ export const usePlayerStore = defineStore('player', () => {
           syncCounter = 0;
           try {
             const pos = await AudioApi.getAudioPosition();
+            if (gen !== tickGeneration) return;
             if (pos >= currentTime.value - 0.5) {
               currentTime.value = pos;
             }
@@ -494,6 +571,7 @@ export const usePlayerStore = defineStore('player', () => {
             stateSyncCounter = 0;
             try {
               const backendPlaying = await AudioApi.isAudioPlaying();
+              if (gen !== tickGeneration) return;
               if (backendPlaying !== playing.value) {
                 playing.value = backendPlaying;
               }
@@ -515,7 +593,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function toggle() {
-    if (_switchingSong) return;
+    if (switching.value) return;
     try {
       const backendPlaying = await AudioApi.isAudioPlaying();
       if (backendPlaying !== playing.value) {
@@ -546,7 +624,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   function prev() {
     if (isFmMode.value) return;
-    if (_switchingSong) return;
+    if (switching.value) return;
     if (queue.value.length === 0) return;
     currentIndex.value = (currentIndex.value - 1 + queue.value.length) % queue.value.length;
     playCurrent();
@@ -588,7 +666,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   async function seek(time: number) {
-    if (_switchingSong) return;
+    if (switching.value) return;
     try {
       currentTime.value = time;
       if (onSeekStart) onSeekStart();
@@ -620,7 +698,7 @@ export const usePlayerStore = defineStore('player', () => {
       return;
     }
 
-    if (_switchingSong) return;
+    if (switching.value) return;
     if (queue.value.length === 0) return;
     let nextIndex: number;
     switch (playMode.value) {
@@ -708,7 +786,7 @@ async function nextFm() {
 }
 
 listen('audio-ended', () => {
-  if (_switchingSong) return;
+  if (switching.value) return;
   const player = usePlayerStore();
   player.clearTick();
   player.reportScrobble();
@@ -775,6 +853,7 @@ watch(playing, (val) => {
   return {
     currentSong,
     playing,
+    switching,
     currentTime,
     duration,
     queue,

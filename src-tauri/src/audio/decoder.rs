@@ -253,7 +253,9 @@ pub fn decode_to_ring(
             time: Time::from(time),
             track_id: Some(track_id),
         };
-        let _ = format_reader.seek(SeekMode::Accurate, seek_to);
+        if let Err(e) = format_reader.seek(SeekMode::Accurate, seek_to) {
+            eprintln!("[audio] seek 失败(time={}s): {}", time, e);
+        }
     }
 
     let ratio = target_sample_rate as f64 / src_rate;

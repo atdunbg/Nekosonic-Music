@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 mod api;
 mod audio;
 mod media_controls;
+mod music_sources;
 use api::ApiController;
 use audio::AppAudio;
 
@@ -41,7 +42,13 @@ pub fn run() {
                 } else {
                     None
                 };
-                media_controls::start_media_controls(app.handle().clone(), hwnd);
+                // Windows 上 souvlaki 要求 hwnd 必须存在，否则 panic
+                // 窗口尚未创建时跳过媒体控制初始化（不阻塞 app 启动）
+                if hwnd.is_some() {
+                    media_controls::start_media_controls(app.handle().clone(), hwnd);
+                } else {
+                    eprintln!("[media_controls] 窗口未就绪，跳过媒体控制初始化");
+                }
             }
 
             #[cfg(not(target_os = "windows"))]
@@ -140,6 +147,8 @@ pub fn run() {
             api::cloudsearch,
             api::search_suggest,
             api::get_song_url,
+            api::search_songs_multi,
+            api::get_external_song_url,
             api::get_hot_search,
             api::get_playlist_detail,
             api::get_lyric,

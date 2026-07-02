@@ -45,11 +45,13 @@ import VirtualSongList from '../components/VirtualSongList.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { usePlayerStore } from '../stores/player';
 import { pageCacheGet, pageCacheSet, pageCacheInvalidate, pageCacheIsStale } from '../composables/usePageCache';
-import { normalizeSong, type Song } from '../utils/song';
+import { useOnlineStatus } from '../composables/useOnlineStatus';
+import { normalizeSongsWithPrivileges, type Song } from '../utils/song';
 
 defineOptions({ name: 'DailySongsView' });
 
 const player = usePlayerStore();
+const { isOnline } = useOnlineStatus();
 const songs = ref<Song[]>([]);
 const loading = ref(true);
 const loadError = ref(false);
@@ -69,7 +71,7 @@ async function loadData(force = false) {
     loadError.value = false;
     const jsonStr: string = await MusicApi.recommendSongs();
     const data = JSON.parse(jsonStr);
-    songs.value = (data.data?.dailySongs || []).map(normalizeSong);
+    songs.value = normalizeSongsWithPrivileges(data.data?.dailySongs || [], data.data?.privileges);
     pageCacheSet('dailySongs', songs.value);
   } catch (e) {
     console.error('获取每日推荐失败', e);
@@ -89,7 +91,7 @@ onActivated(() => {
   }
 });
 
-watch(() => navigator.onLine, (val, old) => {
+watch(isOnline, (val, old) => {
   if (val && !old && songs.value.length === 0) {
     pageCacheInvalidate('dailySongs');
     loadData();
